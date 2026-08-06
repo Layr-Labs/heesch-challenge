@@ -1,0 +1,159 @@
+"""Boundary-word extraction and isohedral tiling criteria (spec §2.1 gate 1).
+
+Square grid. The boundary word is the cyclic sequence of unit-edge directions
+walking the outer boundary counterclockwise (interior on the left). Criteria:
+
+- Translation criterion (Beauquier–Nivat): the cyclic boundary factors as
+  A B C Â B̂ Ĉ, where X̂ is the reversed complement (the same run walked
+  backwards), with up to two factors empty. Constructive: a match yields an
+  explicit tiling by translations.
+- Conway criterion: the cyclic boundary factors as A B C D E F where
+  D = Â and each of B, C, E, F is centrosymmetric (symmetric under 180°
+  rotation about its midpoint — for direction words, a literal palindrome),
+  with some factors possibly empty. Constructive: half-turn tiling.
+
+Failing both proves nothing (rotation-only and anisohedral tilers exist);
+callers treat no-match as INCONCLUSIVE, never NON_TILER.
+
+Boundary words longer than MAX_BOUNDARY are not tested (the criteria are
+O(n^3)); such shapes fall through to INCONCLUSIVE. Compact tilers — the
+realistic cheat submissions — have short boundaries.
+"""
+
+from __future__ import annotations
+
+from .grids import Grid, SquareGrid
+
+MAX_BOUNDARY = 160
+
+_TURN_PREFERENCE = (3, 0, 1)  # right turn, straight, left turn (mod 4 deltas)
+
+
+class UnsupportedGrid(Exception):
+    pass
+
+
+class BoundaryError(Exception):
+    pass
+
+
+def boundary_word(cells, grid: Grid) -> list[int]:
+    """Trace the outer boundary of a hole-free, edge-connected polyomino
+    counterclockwise; return the direction word. Directions: 0=+x, 1=+y,
+    2=-x, 3=-y. Cell (x, y) occupies the unit square [x,x+1] x [y,y+1].
+
+    Pinch vertices (two diagonal cells meeting at a point) have four
+    boundary edges; the walk takes the sharpest right turn, which keeps the
+    interior contiguously on the left and yields one cycle."""
+    if not isinstance(grid, SquareGrid):
+        raise UnsupportedGrid(grid.grid_id)
+    cellset = frozenset(cells)
+
+    # Directed boundary edges, interior on the left.
+    out_edges: dict[tuple[int, int], list[int]] = {}
+
+    def add(v, d):
+        out_edges.setdefault(v, []).append(d)
+
+    for (x, y) in cellset:
+        if (x, y - 1) not in cellset:
+            add((x, y), 0)          # bottom edge, runs +x
+        if (x + 1, y) not in cellset:
+            add((x + 1, y), 1)      # right edge, runs +y
+        if (x, y + 1) not in cellset:
+            add((x + 1, y + 1), 2)  # top edge, runs -x
+        if (x - 1, y) not in cellset:
+            add((x, y + 1), 3)      # left edge, runs -y
+
+    total = sum(len(v) for v in out_edges.values())
+    start = min(out_edges)
+    d0 = min(out_edges[start])
+    word: list[int] = []
+    cur, d = start, d0
+    remaining = {v: set(ds) for v, ds in out_edges.items()}
+    vec = {0: (1, 0), 1: (0, 1), 2: (-1, 0), 3: (0, -1)}
+    for _ in range(total):
+        remaining[cur].discard(d)
+        word.append(d)
+        cur = (cur[0] + vec[d][0], cur[1] + vec[d][1])
+        if cur == start and not any(remaining.values()):
+            break
+        cands = remaining.get(cur)
+        if not cands:
+            raise BoundaryError(f"walk dead-ends at {cur}")
+        for delta in _TURN_PREFERENCE:
+            nd = (d + delta) % 4
+            if nd in cands:
+                d = nd
+                break
+        else:
+            raise BoundaryError(f"no continuation at {cur}")
+    if len(word) != total:
+        raise BoundaryError("outer boundary is not a single cycle")
+    return word
+
+
+def _comp(d: int) -> int:
+    return (d + 2) % 4
+
+
+def _hat(w: list[int]) -> list[int]:
+    """Reversed complement: the same boundary run walked backwards."""
+    return [_comp(d) for d in reversed(w)]
+
+
+def _is_centrosymmetric(w: list[int]) -> bool:
+    """Symmetric under 180° rotation about the run's midpoint. The half-turn
+    maps direction d to d+2 and reverses traversal, so the rotated run read
+    from its new start has the ORIGINAL direction sequence reversed twice —
+    i.e. the condition on the word is a literal palindrome."""
+    return w == w[::-1]
+
+
+def _rotations(w: list[int]):
+    for i in range(len(w)):
+        yield w[i:] + w[:i]
+
+
+def translation_criterion(word: list[int]) -> bool:
+    """Beauquier–Nivat A B C Â B̂ Ĉ factorization over all rotations."""
+    n = len(word)
+    if n == 0 or n % 2 != 0 or n > MAX_BOUNDARY:
+        return False
+    half = n // 2
+    for w in _rotations(word):
+        for i in range(half + 1):
+            if w[half:half + i] != _hat(w[:i]):
+                continue
+            for j in range(i, half + 1):
+                if w[half + i:half + j] != _hat(w[i:j]):
+                    continue
+                if w[half + j:] == _hat(w[j:half]):
+                    return True
+    return False
+
+
+def conway_criterion(word: list[int]) -> bool:
+    """Conway A B C D E F factorization (D = Â; B, C, E, F palindromes)
+    over all rotations."""
+    n = len(word)
+    if n == 0 or n > MAX_BOUNDARY:
+        return False
+
+    def splits_into_two_palindromes(w: list[int]) -> bool:
+        return any(
+            _is_centrosymmetric(w[:s]) and _is_centrosymmetric(w[s:])
+            for s in range(len(w) + 1)
+        )
+
+    for w in _rotations(word):
+        for la in range(n // 2 + 1):
+            a_hat = _hat(w[:la])
+            for k in range(la, n - la + 1):
+                if w[k:k + la] != a_hat:
+                    continue
+                if splits_into_two_palindromes(w[la:k]) and splits_into_two_palindromes(
+                    w[k + la:]
+                ):
+                    return True
+    return False
