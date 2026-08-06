@@ -22,3 +22,4 @@ packages = ["heesch_verify", "heesch_encoder", "harness"]
 
 [tool.setuptools.package-data]
 heesch_encoder = ["epoch/*.json"]
+heesch_verify = ["known_tilers.json"]

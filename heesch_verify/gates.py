@@ -20,15 +20,38 @@ class Verdict(str, enum.Enum):
     INCONCLUSIVE = "INCONCLUSIVE"
 
 
+def _load_known_tilers() -> dict:
+    import json
+    import pathlib
+
+    path = pathlib.Path(__file__).parent / "known_tilers.json"
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {gid: frozenset(digests) for gid, digests in data.items()}
+
+
 class IsohedralGate:
-    """Gate 1: boundary-word isohedral tiling criteria. Fast, deterministic,
-    polynomial; runs on every submission as a cheap pre-filter."""
+    """Gate 1: boundary-word isohedral tiling criteria plus a digest table
+    of exhaustively-known tilers (from published classifications — catches
+    small anisohedral tilers the factorization criteria cannot). Fast,
+    deterministic, polynomial; runs on every submission as a cheap
+    pre-filter."""
+
+    _KNOWN = None
 
     def __init__(self, grid):
         self.grid = grid
+        if IsohedralGate._KNOWN is None:
+            IsohedralGate._KNOWN = _load_known_tilers()
 
     def check(self, cells) -> Verdict:
         from . import boundary
+        from .canonical import canonical_digest
+
+        known = IsohedralGate._KNOWN.get(self.grid.grid_id)
+        if known and canonical_digest(cells, self.grid, True) in known:
+            return Verdict.TILER
 
         try:
             word = boundary.boundary_word(cells, self.grid)
