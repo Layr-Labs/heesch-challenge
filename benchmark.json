@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "name": "heesch",
+  "description": "PLACEHOLDER — Heesch challenge description (task, scoring rule, constraints). Fill in once the problem definition is frozen.",
+  "category": "python",
+  "direction": "+",
+  "editablePaths": ["submission"],
+  "setupCommand": ["bash", "-lc", ".yukon/setup.sh"],
+  "benchmarkCommand": ["bash", "-lc", ".yukon/run.sh"],
+  "scorePath": ".yukon/score.json",
+  "maxSubmissionBytes": 33554432,
+  "runner": {
+    "provider": "github-actions",
+    "workflow": "benchmark.yml"
+  }
+}

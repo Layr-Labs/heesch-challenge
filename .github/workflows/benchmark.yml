@@ -1,0 +1,37 @@
+name: Benchmark
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup
+        run: bash .yukon/setup.sh
+
+      - name: Benchmark
+        run: bash .yukon/run.sh
+
+      - name: Upload score
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-score
+          path: .yukon/score.json
+          if-no-files-found: error
