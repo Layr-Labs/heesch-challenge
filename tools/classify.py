@@ -253,13 +253,16 @@ def emit_nontiler(cells, grid_id, res, out_path: pathlib.Path):
         for lvl, xf in base:
             x = xf if isinstance(xf, Xform) else placement_to_xform(xf, grid)
             cellsU |= x.apply_all(tile)
-        # find one hole-allowed completion
-        state = _State(tile, grid, contact, time.time() + 60)
-        sols, any_sat = _completions(state, frozenset(cellsU), want_hole_free=False)
-        assert any_sat, "hh witness vanished"
+        # find ONE hole-allowed completion — lazy, first solution wins
+        state = _State(tile, grid, contact, time.time() + 120)
+        sol = None
+        for item in _iter_completions(state, frozenset(cellsU), want_hole_free=False):
+            if item is ANY_SAT:
+                continue
+            sol = item
+            break
+        assert sol is not None, "hh witness vanished"
         k = max(lvl for lvl, _ in base)
-        sol = sols[0] if sols else None
-        assert sol is not None
         patches.append(list(base) + [(k + 1, p) for p in sol])
 
     text = witness_file(cells, grid_id, res["hc"], res["hh"], patches)
@@ -277,12 +280,28 @@ def emit_nontiler(cells, grid_id, res, out_path: pathlib.Path):
 GRID_OF = {"omino": "O", "hex": "H", "iamond": "I"}
 
 
+def _worker(args):
+    gid, cells, budget = args
+    try:
+        res = classify(cells, grid_id=gid, budget_s=budget)
+    except Exception as e:  # a worker crash must not kill the sweep
+        res = {"kind": "ERROR", "error": repr(e)}
+    return cells, res
+
+
 def main():
+    global SHAPE_BUDGET_S
     kind, n, out_dir = sys.argv[1], int(sys.argv[2]), pathlib.Path(sys.argv[3])
+    jobs = int(sys.argv[4]) if len(sys.argv) > 4 else 1
+    if len(sys.argv) > 5:
+        SHAPE_BUDGET_S = float(sys.argv[5])
     gid = GRID_OF[kind]
     out_dir.mkdir(parents=True, exist_ok=True)
     shapes = free_polyforms(gid, n)
-    print(f"{len(shapes)} free {n}-cell {kind}s", flush=True)
+    print(f"{len(shapes)} free {n}-cell {kind}s (jobs={jobs})", flush=True)
+    if jobs > 1:
+        _main_parallel(kind, gid, n, out_dir, shapes, jobs)
+        return
     counts = {"HOLE": 0, "TILER": 0, "NONTILER": 0, "INCONCLUSIVE": 0}
     nontilers = []
     t0 = time.time()
@@ -304,6 +323,41 @@ def main():
     for j, (cells, res) in enumerate(nontilers):
         emit_nontiler(cells, gid, res,
                       out_dir / f"{kind}{n}-nontiler-{j}-hc{res['hc']}hh{res['hh']}.txt")
+    print(f"counts: {counts}  ({time.time() - t0:.0f}s)", flush=True)
+
+
+def _main_parallel(kind, gid, n, out_dir, shapes, jobs):
+    import multiprocessing as mp
+
+    t0 = time.time()
+    counts = {"HOLE": 0, "TILER": 0, "NONTILER": 0, "INCONCLUSIVE": 0, "ERROR": 0}
+    nontilers = []
+    with mp.Pool(jobs) as pool:
+        done = 0
+        for cells, res in pool.imap_unordered(
+            _worker, [(gid, c, SHAPE_BUDGET_S) for c in shapes], chunksize=1
+        ):
+            counts[res["kind"]] += 1
+            done += 1
+            if res["kind"] == "NONTILER":
+                nontilers.append((cells, res))
+                print(f"  nontiler #{len(nontilers)}: hc={res['hc']} hh={res['hh']} "
+                      f"{sorted(cells)[:4]}...", flush=True)
+            elif res["kind"] == "ERROR":
+                print(f"  WORKER ERROR: {res['error']} on {sorted(cells)}", flush=True)
+            elif res["kind"] == "HOLE":
+                path = out_dir / f"{kind}{n}-holed-{counts['HOLE']}.txt"
+                grid_line = gid + " " + " ".join(f"{x} {y}" for x, y in sorted(cells))
+                path.write_text(grid_line + "\n~ 0 0 0\n", encoding="ascii", newline="\n")
+            if done % 25 == 0:
+                print(f"  ... {done}/{len(shapes)} ({time.time() - t0:.0f}s) {counts}",
+                      flush=True)
+    for j, (cells, res) in enumerate(nontilers):
+        try:
+            emit_nontiler(cells, gid, res,
+                          out_dir / f"{kind}{n}-nontiler-{j}-hc{res['hc']}hh{res['hh']}.txt")
+        except Exception as e:
+            print(f"  EMIT FAILED for nontiler {j}: {e!r}", flush=True)
     print(f"counts: {counts}  ({time.time() - t0:.0f}s)", flush=True)
 
 
