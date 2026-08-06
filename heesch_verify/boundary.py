@@ -133,6 +133,36 @@ def translation_criterion(word: list[int]) -> bool:
     return False
 
 
+def _is_theta_drome(w: list[int], theta_quarter: int) -> bool:
+    """Langerman–Winslow Θ-drome: X = Y · t_{Θ+180}(Ỹ). Even length; the
+    second half is the (Θ+180°)-rotation of the reversed first half.
+    theta_quarter counts CCW quarter turns (90-drome -> 1)."""
+    n = len(w)
+    if n % 2 != 0:
+        return False
+    rot = (theta_quarter + 2) % 4
+    half = n // 2
+    return all(w[half + i] == (w[half - 1 - i] + rot) % 4 for i in range(half))
+
+
+def quarter_turn_criterion(word: list[int]) -> bool:
+    """Langerman–Winslow quarter-turn form: some rotation of the cyclic
+    boundary factors as W = A B C with A a palindrome and B, C 90-dromes
+    (factors may be empty). Constructive: yields an isohedral tiling using
+    90° rotations."""
+    n = len(word)
+    if n == 0 or n > MAX_BOUNDARY:
+        return False
+    for w in _rotations(word):
+        for i in range(n + 1):
+            if not _is_centrosymmetric(w[:i]):
+                continue
+            for j in range(i, n + 1):
+                if _is_theta_drome(w[i:j], 1) and _is_theta_drome(w[j:], 1):
+                    return True
+    return False
+
+
 def conway_criterion(word: list[int]) -> bool:
     """Conway A B C D E F factorization (D = Â; B, C, E, F palindromes)
     over all rotations."""
