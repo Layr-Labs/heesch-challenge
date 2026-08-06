@@ -76,6 +76,11 @@ def _dup_groups(fix, enc):
 @pytest.mark.parametrize("name", [f[0] for f in FIXTURES])
 def test_e3_models_decode_to_legal_coronas(name):
     fix, enc = _setup(name)
+    if any(len(c) == 0 for c in enc.formula.clauses):
+        # A real empty clause (§4.3: an R-cell no copy reaches) means
+        # trivially UNSAT — zero models, E3 holds vacuously. pysat cannot
+        # bootstrap an empty clause, so short-circuit.
+        return
     n_x = len(enc.formula.universe)
     checked = 0
     with Solver(name="cadical195",
@@ -158,6 +163,10 @@ def test_e4_and_geometric_cross_count(name):
     )
 
     # --- geometric cross-count via assumption-collapsed model enumeration ---
+    if any(len(c) == 0 for c in enc.formula.clauses):
+        # Empty clause: UNSAT by construction. The brute force must agree.
+        assert covers == set(), f"{name}: covers exist despite empty clause"
+        return
     assumptions = [-v for vars_ in groups.values() for v in vars_[1:]]
     model_covers = set()
     exhausted = True

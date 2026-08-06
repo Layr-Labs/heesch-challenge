@@ -9,6 +9,34 @@ spec §7) with their arguments; each has a test in `tests/encoder/`.
 **Status: DRAFT — requires external review before the first record-tier
 promotion (spec §13.9). The ProofCarryingGate remains disabled until then.**
 
+## ⚠ E8 (found in implementation review): the per-patch quantifier gap
+
+**The spec's central inference is unsound as stated for k ≥ 1.** The formula
+`F(S, P_k)` (encoder spec §3.1) is parametrized by ONE submitted patch.
+UNSAT of `F` proves "this particular `P_k` admits no corona `k+1`" — but
+`Hh >= k+1` requires only that SOME hole-free k-patch extends, and patches
+are not interchangeable (corona search genuinely backtracks across patch
+choices; that is why heesch-sat encodes ALL levels in a single formula).
+So a checked UNSAT proof does NOT establish `Hh <= k`, and by the same
+argument does not establish non-tilerhood, except in one case:
+
+- **k = 0 is sound**: `P_0` is the tile itself, unique up to the motions the
+  formula already quantifies over. UNSAT of `F(S, P_0)` proves `Hh = 0`.
+
+Consequences until fixed:
+1. The ProofCarryingGate must not promote exactness records for k >= 1 from
+   single-level proofs. (It is already disabled wholesale.)
+2. The fix is a **multi-level encoder** — variables for placements at every
+   level 1..k+1 with level-adjacency constraints (touch level i−1, not
+   i−2), Kaplan-style — whose UNSAT genuinely quantifies over all patches.
+   That is a new encoder version with its own E1–E6 analogues and round-trip
+   suites: budget it as a project (same class as the §12 hole-constrained
+   encoder), not a patch.
+3. The witness/lower-bound path is entirely unaffected.
+
+This is exactly the class of defect the external-review requirement exists
+to catch; it must be resolved in the spec before any exactness claim ships.
+
 ## The claim
 
 For tile `S`, verified patch `P_k` (coronas 0..k, hole-free), and the formula

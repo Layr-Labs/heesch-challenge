@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Yukon benchmark step. Must write .yukon/score.json with a finite numeric
-# "score", or exit nonzero. Never write a fake score on failure.
+# Yukon benchmark step — keep aligned with benchmark.json benchmarkCommand.
+# Writes .yukon/score.json with a finite numeric "score" on success, exits
+# nonzero otherwise; never writes a fake score. -P prevents anything under
+# the competitor-editable submission/ directory from shadowing installed
+# packages.
 set -euo pipefail
-
-python -m harness.verify
+PYTHONHASHSEED=0 python -P -m harness.verify

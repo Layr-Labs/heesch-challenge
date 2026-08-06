@@ -40,6 +40,13 @@ class IsohedralGate:
             return Verdict.TILER
         if boundary.conway_criterion(word):
             return Verdict.TILER
+        if boundary.quarter_turn_criterion(word):
+            return Verdict.TILER
+        # Reflection factorization forms (Langerman–Winslow types 4–7) are
+        # deliberately not implemented yet: a wrong TILER verdict rejects a
+        # legitimate submission, so each form ships only after differential
+        # validation against heesch-sat classifications. Their absence only
+        # weakens the filter, never soundness.
         return Verdict.INCONCLUSIVE
 
 
@@ -61,7 +68,11 @@ class SatClassifierGate:
 class ProofCarryingGate:
     """Gate 3: the promotion path. Regenerates the CNF with the frozen
     encoder, digest-matches, and validates a DRAT/LRAT proof. Hard-disabled
-    until the encoder spec's §9 round-trip suite passes in full (§2.1)."""
+    until the encoder spec's §9 round-trip suite passes in full (§2.1) AND
+    the E8 per-patch quantifier gap is resolved (docs/soundness-note.md):
+    a single-level UNSAT proof only rules out extending ONE patch, which
+    establishes Hh <= k soundly only at k = 0. Exactness for k >= 1 needs
+    the multi-level encoder."""
 
     ENABLED = False
 

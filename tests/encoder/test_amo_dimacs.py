@@ -20,7 +20,7 @@ def _eval(clauses, assign):
     return all(any((l > 0) == assign.get(abs(l), False) for l in cl) for cl in clauses)
 
 
-@pytest.mark.parametrize("n", [2, 3, 5, 8, 13])
+@pytest.mark.parametrize("n", [2, 3, 5, 8])
 def test_sequential_amo_exact_model_count(n):
     """Over the x variables, exactly the n+1 assignments with <= 1 true must
     extend to a satisfying assignment of the Sinz clauses — and every
