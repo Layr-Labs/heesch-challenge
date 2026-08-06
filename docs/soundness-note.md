@@ -29,9 +29,10 @@ Consequences until fixed:
 2. The fix is a **multi-level encoder** — variables for placements at every
    level 1..k+1 with level-adjacency constraints (touch level i−1, not
    i−2), Kaplan-style — whose UNSAT genuinely quantifies over all patches.
-   That is a new encoder version with its own E1–E6 analogues and round-trip
-   suites: budget it as a project (same class as the §12 hole-constrained
-   encoder), not a patch.
+   **Fully specified in `heesch-multilevel-encoder-spec.md` (workspace root)
+   as heesch-encoder/v2**: weak-configuration relaxation (Hc <= Hh <= W),
+   obligations M1–M9, weak-gap measurement plan, feasibility gates, build
+   order. Budgeted as a project, not a patch.
 3. The witness/lower-bound path is entirely unaffected.
 
 This is exactly the class of defect the external-review requirement exists
