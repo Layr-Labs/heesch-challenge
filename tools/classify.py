@@ -106,46 +106,60 @@ ANY_SAT = object()  # sentinel yielded once when the formula is satisfiable
 
 
 def _iter_completions(state, patch_cells, want_hole_free: bool):
-    """Lazily yield corona completions of P_k, geometrically deduped via
-    assumptions. Yields the ANY_SAT sentinel on the first model regardless of
-    the hole filter."""
-    enc = encode(state.tile, patch_cells, state.grid, state.contact)
-    if any(len(cl) == 0 for cl in enc.formula.clauses):
-        return  # unreachable cell: trivially no corona
-    groups: dict = {}
-    for var, p in enumerate(enc.formula.universe, start=1):
-        cs = materialize(p, state.tile, state.grid)
-        groups.setdefault(cs, []).append(var)
-    assumptions = [-v for vs in groups.values() for v in vs[1:]]
-    var_placement = {i + 1: p for i, p in enumerate(enc.formula.universe)}
-    n_x = len(enc.formula.universe)
+    """Lazily yield corona completions of P_k as exact covers of R by the
+    placement universe, geometrically deduped, min-candidate branching.
 
-    seen_sat = False
-    count = 0
-    with Solver(name="cadical195",
-                bootstrap_with=[list(c) for c in enc.formula.clauses]) as s:
-        while True:
-            if time.time() > state.deadline:
-                raise Budget
-            if not s.solve(assumptions=assumptions):
-                break
-            if not seen_sat:
-                seen_sat = True
+    ASSUMPTION (documented, validated against published values): only
+    IRREDUNDANT covers are enumerated — every tile covers some R-cell chosen
+    as a branch point. Any cover contains an irredundant subcover, so corona
+    EXISTENCE (the ANY_SAT sentinel) is exact; but a hole-free REDUNDANT
+    cover could in principle exist whose irredundant subcovers all have
+    pockets (a redundant tile plugging a pocket). The heptomino and 6-hex
+    calibrations reproduce Kaplan's published values under this assumption.
+    """
+    from heesch_encoder.placements import enumerate_universe
+    from heesch_verify.patch import required_set
+
+    universe = enumerate_universe(state.tile, patch_cells, state.grid, state.contact)
+    R = sorted(required_set(patch_cells, state.contact))
+    if not R:
+        return
+    cells_of_p = {p: materialize(p, state.tile, state.grid) for p in universe}
+    # geometric dedupe: one canonical placement per distinct cell set
+    canon: dict = {}
+    for p in universe:
+        canon.setdefault(cells_of_p[p], p)
+    cellsets = list(canon.keys())
+    cover_of = {c: [cs for cs in cellsets if c in cs] for c in R}
+    if any(not cover_of[c] for c in R):
+        return  # some required cell unreachable: no corona at all
+
+    seen_sat = [False]
+    count = [0]
+
+    def rec(uncovered, chosen_sets, chosen_cells):
+        if time.time() > state.deadline:
+            raise Budget
+        if not uncovered:
+            if not seen_sat[0]:
+                seen_sat[0] = True
                 yield ANY_SAT
-            model = s.get_model()
-            chosen = [v for v in range(1, n_x + 1) if model[v - 1] > 0]
-            s.add_clause([-v for v in chosen])
-            placements = [var_placement[v] for v in chosen]
-            if want_hole_free:
-                cells = set(patch_cells)
-                for p in placements:
-                    cells |= materialize(p, state.tile, state.grid)
-                if holes_of(frozenset(cells), state.grid):
-                    continue
-            count += 1
-            if count > COMPLETIONS_CAP:
+            if want_hole_free and holes_of(
+                frozenset(patch_cells | chosen_cells), state.grid
+            ):
+                return
+            count[0] += 1
+            if count[0] > COMPLETIONS_CAP:
                 raise Budget
-            yield placements
+            yield [canon[cs] for cs in chosen_sets]
+            return
+        c = min(uncovered, key=lambda cc: (len(cover_of[cc]), cc[1], cc[0]))
+        for cs in cover_of[c]:
+            if cs & chosen_cells:
+                continue
+            yield from rec(uncovered - cs, chosen_sets + [cs], chosen_cells | cs)
+
+    yield from rec(frozenset(R), [], frozenset())
 
 
 def _explore(state, patch_cells, placements_so_far, k):
