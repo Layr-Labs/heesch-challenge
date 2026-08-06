@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "heesch-harness"
+version = "1.0.0.dev0"
+description = "Heesch challenge: geometry verifier, CNF encoder, and Yukon evaluator"
+requires-python = ">=3.11"
+# The verifier and harness are deliberately stdlib-only (spec §5 hard rule).
+# Solver tooling for the encoder test suites lives in the test extra.
+dependencies = []
+
+[project.optional-dependencies]
+test = [
+    "pytest==8.4.2",
+    "python-sat==1.9.dev7",
+]
+
+[tool.setuptools]
+packages = ["heesch_verify", "heesch_encoder", "harness"]
+
+[tool.setuptools.package-data]
+heesch_encoder = ["epoch/*.json"]
