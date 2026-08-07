@@ -90,12 +90,16 @@ class SatClassifierGate:
 
 class ProofCarryingGate:
     """Gate 3: the promotion path. Regenerates the CNF with the frozen
-    encoder, digest-matches, and validates a DRAT/LRAT proof. Hard-disabled
-    until the encoder spec's §9 round-trip suite passes in full (§2.1) AND
-    the E8 per-patch quantifier gap is resolved (docs/soundness-note.md):
-    a single-level UNSAT proof only rules out extending ONE patch, which
-    establishes Hh <= k soundly only at k = 0. Exactness for k >= 1 needs
-    the multi-level encoder."""
+    encoder, digest-matches, and validates a DRAT/LRAT proof via
+    heesch_encoder.proofcheck.pipeline.check_proof_v2 (the multilevel
+    F(S, k+1), which resolves the E8 per-patch quantifier gap — see
+    docs/soundness-note.md and heesch-multilevel-encoder-spec.md). The v1
+    single-level path remains sound only at k = 0.
+
+    Hard-disabled pending external review of the v2 soundness obligations
+    (M1-M9) — the round-trip, determinism, continuity and census-closing
+    suites are green, but the spec requires review before the first
+    record-tier promotion."""
 
     ENABLED = False
 

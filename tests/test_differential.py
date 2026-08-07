@@ -73,7 +73,7 @@ def test_fast_vs_naive_agree(seed):
         # Naive path (structure checks only; claims compared separately).
         ok, hc, _reason = naive_verdict(
             sub.cells, sub.patches[0] if sub.patches else [], grid,
-            "point", outer_holes_allowed=False,
+            "point", hole_mode="hc",
         )
         naive_ok = ok and hc >= sub.hc_claim
 

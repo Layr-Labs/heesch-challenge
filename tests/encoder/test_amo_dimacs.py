@@ -59,7 +59,7 @@ def _tiny_encoding():
     contact = grid.contact("point")
     tile = frozenset([(0, 0)])
     corona = check_corona(tile, [(0, Xform(1, 0, 0, 0, 1, 0))], grid, contact,
-                          outer_holes_allowed=False)
+                          hole_mode="hc")
     return encode(tile, corona.patch_cells, grid, contact)
 
 
@@ -100,7 +100,7 @@ def test_empty_clause_emitted_for_unreachable_cell():
              if (x, y) not in ((2, 1), (2, 2))]
     tile = frozenset(cells)
     corona = check_corona(tile, [(0, Xform(1, 0, 0, 0, 1, 0))], grid, contact,
-                          outer_holes_allowed=False)
+                          hole_mode="hc")
     enc = encode(tile, corona.patch_cells, grid, contact)
     lines = enc.dimacs.decode("ascii").split("\n")
     assert "0" in lines, "no empty clause despite unreachable required cells"

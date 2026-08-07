@@ -29,3 +29,10 @@ def literal_key(lit: int) -> tuple:
     """Within a clause: ascending absolute value, negative before positive at
     equal magnitude (§6)."""
     return (abs(lit), lit > 0)
+
+
+def xvar_key(level: int, p) -> tuple:
+    """v2 (multilevel spec §6): level-major x-variable order —
+    (l, symmetry_index, ty, tx). Additive to the v1 orders; epoch-1 is
+    untouched."""
+    return (level,) + placement_key(p)

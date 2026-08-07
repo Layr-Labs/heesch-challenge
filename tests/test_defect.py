@@ -139,7 +139,7 @@ def test_pocket_fixture_mandatory():
 
     # Verify the central tile alone as a 0-corona patch.
     corona = check_corona(tromino, [(0, Xform(1, 0, 0, 0, 1, 0))], grid, contact,
-                          outer_holes_allowed=False)
+                          hole_mode="hc")
     R = required_set(corona.patch_cells, contact)
 
     # Cover R completely with monomino... no — tiles must be copies of the

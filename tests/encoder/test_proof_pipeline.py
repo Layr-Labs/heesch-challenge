@@ -29,7 +29,7 @@ def _enc():
     contact = grid.contact("point")
     tile = frozenset([(0, 0), (1, 0)])
     corona = check_corona(tile, [(0, Xform(1, 0, 0, 0, 1, 0))], grid, contact,
-                          outer_holes_allowed=False)
+                          hole_mode="hc")
     return tile, corona.patch_cells, grid, contact, encode(tile, corona.patch_cells, grid, contact)
 
 
@@ -167,7 +167,7 @@ def test_real_checker_verifies_trivial_unsat(tmp_path):
              if (x, y) not in ((2, 1), (2, 2))]
     tile = frozenset(cells)
     corona = check_corona(tile, [(0, Xform(1, 0, 0, 0, 1, 0))], grid, contact,
-                          outer_holes_allowed=False)
+                          hole_mode="hc")
     enc = encode(tile, corona.patch_cells, grid, contact)
     proof = _write(tmp_path, "p.drat", b"0\n")
     sub = ProofSubmission(proof, enc.digest, enc.num_vars, enc.num_clauses)

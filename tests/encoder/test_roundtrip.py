@@ -36,7 +36,7 @@ def _setup(name):
     grid = GRIDS[gid]
     contact = grid.contact("point")
     tile = frozenset(cells)
-    corona = check_corona(tile, placements, grid, contact, outer_holes_allowed=False)
+    corona = check_corona(tile, placements, grid, contact, hole_mode="hc")
     fix = {
         "name": name, "grid": grid, "contact": contact, "tile": tile,
         "patch": corona.patch_cells, "k": corona.max_level,
@@ -57,7 +57,7 @@ def _oracle_accepts(fix, chosen) -> bool:
         placements.append((fix["k"] + 1, _placement_to_xform(p, fix["grid"])))
     try:
         check_corona(fix["tile"], placements, fix["grid"], fix["contact"],
-                     outer_holes_allowed=True)
+                     hole_mode="hh")
         return True
     except Exception:
         return False

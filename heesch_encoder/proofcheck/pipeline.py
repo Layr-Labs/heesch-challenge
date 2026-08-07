@@ -94,8 +94,27 @@ def _copy(src, dst):
 
 def check_proof(sub: ProofSubmission, tile_cells, patch_cells, grid, contact,
                 tier: Tier = Tier.RECORD, timeout: float = 3600.0) -> ProofOutcome:
-    # 1-2. Regenerate + digest match before touching the proof.
+    """v1 path: regenerate F_v1(S, P_k) then run the frozen steps 2-6."""
     enc = encode(tile_cells, patch_cells, grid, contact)
+    return check_proof_encoded(sub, enc, tier=tier, timeout=timeout)
+
+
+def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
+                   tier: Tier = Tier.RECORD, timeout: float = 3600.0) -> ProofOutcome:
+    """v2 path: regenerate the multilevel F(S, m) then the same frozen
+    steps. UNSAT verified here means no weak m-configuration exists —
+    Hh <= m-1 over ALL patches (multilevel spec §2.2)."""
+    from ..multilevel.api import encode_multilevel
+
+    enc = encode_multilevel(tile_cells, grid, contact, m)
+    return check_proof_encoded(sub, enc, tier=tier, timeout=timeout)
+
+
+def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
+                        timeout: float = 3600.0) -> ProofOutcome:
+    """Steps 2-6 of the frozen order, schema-blind: works for any encoding
+    object exposing digest/num_vars/num_clauses/dimacs."""
+    # 2. Digest match before touching the proof.
     if enc.digest != sub.claimed_cnf_digest:
         return ProofOutcome(
             ProofStatus.PROOF_CNF_DIGEST_MISMATCH,

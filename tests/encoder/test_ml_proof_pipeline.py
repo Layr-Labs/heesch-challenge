@@ -1,0 +1,103 @@
+"""Proof pipeline over v2 CNFs: the frozen pre-checker stages behave
+identically (spy asserts no checker runs on early rejects), plus the §9.8
+positive control through real drat-trim when tools/bin is built (CI)."""
+
+import pathlib
+
+import pytest
+
+from conftest import ROOT
+
+from heesch_encoder.multilevel.api import encode_multilevel
+from heesch_encoder.proofcheck import checkers as ck
+from heesch_encoder.proofcheck.pipeline import (
+    ProofStatus,
+    ProofSubmission,
+    Tier,
+    check_proof_v2,
+)
+from heesch_verify.grids import GRIDS
+
+# The census-closed octomino: F(S,2) is genuinely UNSAT (its exactness proof
+# target). Cells transcribed from the corpus witness.
+_CORPUS = pathlib.Path(ROOT) / "tests" / "corpus"
+
+
+def _unsat_octomino():
+    from heesch_verify.parse import parse_submission
+
+    files = sorted(_CORPUS.glob("omino8-nontiler-*-hc1hh1.txt"))
+    assert files, "census-closed octomino corpus file missing"
+    # Any hc1hh1 octomino whose F(S,2) is UNSAT works; the census-closed one
+    # is guaranteed. Try each until one is UNSAT-by-encoding... cheaper: just
+    # use the last-indexed file (the census closure).
+    sub = parse_submission(files[-1].read_text(encoding="ascii"))
+    return frozenset(sub.cells), sub.grid
+
+
+@pytest.fixture
+def spy_checkers(monkeypatch):
+    calls = []
+
+    def fake(name):
+        def run(*a, **k):
+            calls.append(name)
+            return ck.CheckResult(name, ck.CheckStatus.VERIFIED, 0.0)
+        return run
+
+    monkeypatch.setattr(ck, "drat_trim", fake("drat-trim"))
+    monkeypatch.setattr(ck, "lrat_check", fake("lrat-check"))
+    monkeypatch.setattr(ck, "cake_lpr", fake("cake_lpr"))
+    return calls
+
+
+def test_v2_digest_mismatch_rejects_before_checkers(tmp_path, spy_checkers):
+    tile, grid = _unsat_octomino()
+    contact = grid.contact("point")
+    proof = tmp_path / "p.drat"
+    proof.write_bytes(b"1 2 0\n0\n")
+    sub = ProofSubmission(str(proof), "0" * 64, 1, 1)
+    out = check_proof_v2(sub, tile, grid, contact, 2, Tier.RECORD)
+    assert out.status is ProofStatus.PROOF_CNF_DIGEST_MISMATCH
+    assert spy_checkers == []
+
+
+def test_v2_header_mismatch(tmp_path, spy_checkers):
+    tile, grid = _unsat_octomino()
+    contact = grid.contact("point")
+    enc = encode_multilevel(tile, grid, contact, 2)
+    proof = tmp_path / "p.drat"
+    proof.write_bytes(b"1 2 0\n0\n")
+    sub = ProofSubmission(str(proof), enc.digest, enc.num_vars + 1, enc.num_clauses)
+    out = check_proof_v2(sub, tile, grid, contact, 2, Tier.RECORD)
+    assert out.status is ProofStatus.PROOF_HEADER_MISMATCH
+    assert spy_checkers == []
+
+
+CHECKERS_BUILT = (pathlib.Path(ROOT) / "tools" / "bin" / "drat-trim").exists() or (
+    pathlib.Path(ROOT) / "tools" / "bin" / "drat-trim.exe"
+).exists()
+
+
+@pytest.mark.skipif(not CHECKERS_BUILT, reason="tools/bin checkers not built (CI-only)")
+def test_v2_real_unsat_proof_verifies(tmp_path):
+    """§9.8 positive control: solve the census-closed octomino's F(S,2) with
+    a DRAT-emitting run and check the proof through the real pipeline. Uses
+    pysat's cadical with proof tracing when available; skips otherwise."""
+    from pysat.solvers import Solver
+
+    tile, grid = _unsat_octomino()
+    contact = grid.contact("point")
+    enc = encode_multilevel(tile, grid, contact, 2)
+
+    with Solver(name="cadical195",
+                bootstrap_with=[list(c) for c in enc.formula.clauses],
+                with_proof=True) as s:
+        assert not s.solve(), "expected UNSAT for the census-closed octomino"
+        proof_lines = s.get_proof()
+    proof = tmp_path / "p.drat"
+    proof.write_text("\n".join(proof_lines) + "\n0\n", encoding="ascii")
+
+    sub = ProofSubmission(str(proof), enc.digest, enc.num_vars, enc.num_clauses)
+    out = check_proof_v2(sub, tile, grid, contact, 2, Tier.TRIAGE)
+    assert out.status is ProofStatus.VERIFIED, out.detail

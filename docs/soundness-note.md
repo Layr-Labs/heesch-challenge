@@ -38,6 +38,36 @@ Consequences until fixed:
 This is exactly the class of defect the external-review requirement exists
 to catch; it must be resolved in the spec before any exactness claim ships.
 
+### E8 resolution status (2026-08-07): heesch-encoder/v2 BUILT
+
+The multilevel encoder is implemented (`heesch_encoder/multilevel/`,
+epoch-2.json) per `heesch-multilevel-encoder-spec.md`, with all M-obligation
+suites green:
+
+- M1 per-level universe completeness: brute-force list equality across all
+  three grids (`test_ml_universe_m1.py`).
+- M3/M4/M6/M7: model↔geometry round trips against the hole-agnostic Stage 5
+  oracle, label-equality checks, geometric cross-counts, window-vs-family-5
+  structural test (`test_ml_roundtrip.py`).
+- M9 determinism: hash-seed-randomized subprocess goldens
+  (`test_ml_determinism.py`); §9.6 v1-continuity at m=1 over the whole
+  corpus (`test_ml_continuity.py`).
+- **§9.4 calibration: weak gap = 0/46.** Every corpus shape with known exact
+  Heesch values is UNSAT at F(S, k+1) — 46 machine-proven exactness
+  reproductions (docs/ml-weak-gap.md). B = 0 empirically suffices on all
+  measured real shapes.
+- Census results: the v2 encoder CLOSED the octomino-8 census (the last
+  non-tiler proven Hc=Hh=1 by F(S,2) UNSAT) and proved the three known
+  6-hex non-tilers exactly Hc=Hh=1. One 6-hex remains open: proven
+  non-tiler with W<=2 and Hc∈{1,2}, in tension with heesch-sat's README
+  example ("1 with Hc=2") — under arbitration by a current heesch-sat run
+  (see tests/corpus/MANIFEST.json).
+- Feasibility band measured and frozen in epoch-2 (docs/ml-feasibility.md).
+
+**Still required before the first record-tier promotion: external review of
+this note and the M1–M9 arguments.** The ProofCarryingGate remains disabled;
+`check_proof_v2` is wired and negative-suite-tested.
+
 ## The claim
 
 For tile `S`, verified patch `P_k` (coronas 0..k, hole-free), and the formula

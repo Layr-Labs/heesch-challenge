@@ -30,7 +30,7 @@ grid = GRIDS[spec["grid"]]
 contact = grid.contact("point")
 tile = frozenset(tuple(c) for c in spec["cells"])
 placements = [(lvl, Xform(*xf)) for lvl, xf in spec["placements"]]
-corona = check_corona(tile, placements, grid, contact, outer_holes_allowed=False)
+corona = check_corona(tile, placements, grid, contact, hole_mode="hc")
 enc = encode(tile, corona.patch_cells, grid, contact)
 print(enc.digest)
 """

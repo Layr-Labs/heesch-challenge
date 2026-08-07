@@ -6,7 +6,10 @@ fails CI and forces review."""
 import ast
 import pathlib
 
-EMISSION_MODULES = ["ordering.py", "placements.py", "clauses.py", "amo.py", "dimacs.py"]
+EMISSION_MODULES = [
+    "ordering.py", "placements.py", "clauses.py", "amo.py", "dimacs.py",
+    "multilevel/universe.py", "multilevel/clauses.py", "multilevel/api.py",
+]
 PKG = pathlib.Path(__file__).parents[2] / "heesch_encoder"
 
 EXPECTED_PRAGMAS = {
@@ -15,6 +18,9 @@ EXPECTED_PRAGMAS = {
     "clauses.py": 3,
     "amo.py": 0,
     "dimacs.py": 0,
+    "multilevel/universe.py": 4,
+    "multilevel/clauses.py": 5,
+    "multilevel/api.py": 0,
 }
 
 

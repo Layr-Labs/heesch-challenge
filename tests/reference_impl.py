@@ -5,7 +5,7 @@ import this from the package."""
 from __future__ import annotations
 
 
-def naive_verdict(shape_cells, placements, grid, contact_mode, outer_holes_allowed):
+def naive_verdict(shape_cells, placements, grid, contact_mode, hole_mode="hc"):
     """Independently verify a patch. Returns (ok, hc_levels, reason).
 
     placements: list of (level, Xform). Reimplements the rules directly from
@@ -104,13 +104,14 @@ def naive_verdict(shape_cells, placements, grid, contact_mode, outer_holes_allow
                     frontier.append(nb)
         return bool(empty - reached)
 
-    for i in range(1, L + 1):
-        occ = set()
-        for j, lv in level.items():
-            if lv <= i:
-                occ |= tiles[j][1]
-        if has_holes(occ):
-            if i < L or not outer_holes_allowed:
-                return False, 0, f"hole at {i}"
+    if hole_mode != "none":
+        for i in range(1, L + 1):
+            occ = set()
+            for j, lv in level.items():
+                if lv <= i:
+                    occ |= tiles[j][1]
+            if has_holes(occ):
+                if i < L or hole_mode == "hc":
+                    return False, 0, f"hole at {i}"
 
     return True, L, "ok"

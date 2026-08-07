@@ -18,7 +18,13 @@ test = [
 ]
 
 [tool.setuptools]
-packages = ["heesch_verify", "heesch_encoder", "harness"]
+packages = [
+    "heesch_verify",
+    "heesch_encoder",
+    "heesch_encoder.proofcheck",
+    "heesch_encoder.multilevel",
+    "harness",
+]
 
 [tool.setuptools.package-data]
 heesch_encoder = ["epoch/*.json"]

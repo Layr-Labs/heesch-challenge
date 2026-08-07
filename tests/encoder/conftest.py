@@ -70,7 +70,7 @@ def fixture(request):
     grid = GRIDS[gid]
     contact = grid.contact("point")
     corona = check_corona(frozenset(cells), placements, grid, contact,
-                          outer_holes_allowed=False)
+                          hole_mode="hc")
     return {
         "name": name,
         "grid": grid,

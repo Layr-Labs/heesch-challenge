@@ -44,3 +44,28 @@ def constants_digest() -> str:
 
 def load_epoch(n: int = 1) -> dict:
     return json.loads((EPOCH_DIR / f"epoch-{n}.json").read_text(encoding="utf-8"))
+
+
+def live_constants_v2() -> dict:
+    """v2 frozen constants (multilevel spec §11). NEVER fold these into
+    live_constants(): its digest is pinned by the immutable epoch-1
+    manifest."""
+    c = live_constants()
+    c.update({
+        "encoder_version": "heesch-encoder/v2",
+        "families_active": ["1", "2", "4", "5", "6"],
+        "weak_bound_B": 0,
+        "level_window": "{l-1,l,l+1}",
+        "universe_construction": "reachability-bfs/v1",
+        "variable_order": "x:(l,symmetry_index,ty,tx); cov:none; sinz:group-emission",
+        "clause_emission_v2": (
+            "f1-by-cell, f2-by-cell-then-pair, f4-by-(l,p), "
+            "f5-by-(l,p,j,q), f6-by-(l,q,cell)"
+        ),
+    })
+    return c
+
+
+def constants_digest_v2() -> str:
+    payload = json.dumps(live_constants_v2(), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("ascii")).hexdigest()

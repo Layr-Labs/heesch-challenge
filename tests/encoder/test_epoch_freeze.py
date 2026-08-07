@@ -47,6 +47,33 @@ def test_manifest_immutability_pin():
     )
 
 
+def test_live_constants_v2_match_epoch2():
+    epoch = manifest.load_epoch(2)
+    assert epoch["frozen_constants_digest"] == manifest.constants_digest_v2(), (
+        "v2 encoder constants drifted from epoch-2.json — that is heesch-"
+        "encoder/v3 + re-verification, never an in-place edit."
+    )
+    assert epoch["encoder_version"] == "heesch-encoder/v2"
+    assert epoch["epoch"] == 2
+    for key in ("families_active", "weak_bound_B", "level_window",
+                "universe_construction", "feasibility_band", "checkers"):
+        assert key in epoch, f"epoch-2 manifest missing {key}"
+    assert epoch["weak_bound_B"] == 0
+    assert epoch["families_active"] == ["1", "2", "4", "5", "6"]
+
+
+def test_epoch2_manifest_immutability_pin():
+    p = manifest.EPOCH_DIR / "epoch-2.json"
+    digest = hashlib.sha256(p.read_bytes()).hexdigest()
+    pin_file = GOLDEN_DIR / "manifest-2.sha256"
+    if not pin_file.exists():
+        pin_file.write_text(digest + "\n")
+    assert pin_file.read_text().strip() == digest, (
+        "epoch-2.json was edited. Epoch manifests are immutable — write "
+        "epoch-3.json and bump the version instead."
+    )
+
+
 def test_golden_digests_present_and_stable():
     goldens = json.loads((GOLDEN_DIR / "digests.json").read_text())
     assert len(goldens) >= 10

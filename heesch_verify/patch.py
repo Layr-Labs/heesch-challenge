@@ -67,12 +67,25 @@ def materialize(shape_cells, placements) -> tuple[frozenset, ...]:
     return tuple(xf.apply_all(shape_cells) for _lvl, xf in placements)
 
 
+HOLE_MODES = ("hc", "hh", "none")
+
+
 def check_corona(shape_cells, placements, grid: Grid, contact: Contact,
-                 *, outer_holes_allowed: bool,
+                 *, hole_mode: str,
                  max_levels: int = MAX_LEVELS) -> CoronaResult:
     """Stages 5a–5d on one patch. `placements` is a sequence of
     (submitted_level, Xform); transforms are assumed already
-    symmetry-checked (Stage 4 runs in witness.py)."""
+    symmetry-checked (Stage 4 runs in witness.py).
+
+    hole_mode governs Stage 5d only (5a–5c always run):
+      "hc"   — every accumulated patch P_i must be hole-free;
+      "hh"   — inner patches hole-free, outermost may enclose holes;
+      "none" — the hole-agnostic oracle (multilevel encoder spec §9.1):
+               no hole check ever raises; has_outer_holes reports the
+               full-patch flood fill.
+    """
+    if hole_mode not in HOLE_MODES:
+        raise ValueError(f"hole_mode must be one of {HOLE_MODES}, got {hole_mode!r}")
 
     # Central tile: exactly one level-0 placement.
     centrals = [i for i, (lvl, _xf) in enumerate(placements) if lvl == 0]
@@ -164,22 +177,27 @@ def check_corona(shape_cells, placements, grid: Grid, contact: Contact,
             )
         inner.update(level_cells[i])
 
-    # 5d — hole condition. Inner patches must be simply connected; the
-    # outermost may enclose holes only when explicitly allowed (Hh rules).
+    # 5d — hole condition, governed by hole_mode.
     has_outer_holes = False
     acc = set(level_cells[0])
-    for i in range(1, max_level + 1):
-        acc.update(level_cells[i])
-        hs = holes_of(frozenset(acc), grid)
-        if hs:
-            if i < max_level or not outer_holes_allowed:
-                sample = tuple(sorted(hs))[:5]
-                raise VerifyError(
-                    ErrorCode.PATCH_HOLE_IN_CORONA,
-                    f"patch through corona {i} encloses empty cells, e.g. {sample}",
-                    sample,
-                )
-            has_outer_holes = True
+    if hole_mode == "none":
+        # Hole-agnostic: one flood fill over the full patch, never raises.
+        for i in range(1, max_level + 1):
+            acc.update(level_cells[i])
+        has_outer_holes = bool(holes_of(frozenset(acc), grid))
+    else:
+        for i in range(1, max_level + 1):
+            acc.update(level_cells[i])
+            hs = holes_of(frozenset(acc), grid)
+            if hs:
+                if i < max_level or hole_mode == "hc":
+                    sample = tuple(sorted(hs))[:5]
+                    raise VerifyError(
+                        ErrorCode.PATCH_HOLE_IN_CORONA,
+                        f"patch through corona {i} encloses empty cells, e.g. {sample}",
+                        sample,
+                    )
+                has_outer_holes = True
 
     return CoronaResult(
         levels=tuple(level[j] for j in range(n)),

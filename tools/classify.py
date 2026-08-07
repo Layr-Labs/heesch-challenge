@@ -24,7 +24,7 @@ from pysat.solvers import Solver  # noqa: E402
 
 from heesch_verify.canonical import canonical_form  # noqa: E402
 from heesch_verify.grids import GRIDS  # noqa: E402
-from heesch_verify.patch import check_corona  # noqa: E402
+
 from heesch_verify.shape import connected, holes_of  # noqa: E402
 from heesch_verify.transform import Xform  # noqa: E402
 from heesch_verify.witness import verify_witness  # noqa: E402
