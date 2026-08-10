@@ -38,12 +38,22 @@ fi
 scratch="$(cd "$(mktemp -d)" && pwd -P)"
 cleanup() { [[ -z "${scratch:-}" ]] || rm -rf "${scratch}" 2>/dev/null || true; }
 trap cleanup EXIT
-chmod 755 "${scratch}"
+chmod 1777 "${scratch}"   # sandboxed process may run as a different uid
 
 run_verify=()
 if command -v bwrap >/dev/null 2>&1; then
+  # Unprivileged bwrap cannot configure the loopback device inside a fresh
+  # network namespace on some hosts (RTM_NEWADDR EPERM on GitHub runners);
+  # mirror ecdsafail's escalation: passwordless sudo, then setpriv, then
+  # plain bwrap.
+  bw=( bwrap )
+  if [[ "$(id -u)" -ne 0 ]] && command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    bw=( sudo -n bwrap )
+  elif command -v setpriv >/dev/null 2>&1; then
+    bw=( setpriv --no-new-privs bwrap )
+  fi
   run_verify=(
-    bwrap
+    "${bw[@]}"
       --ro-bind / / --dev /dev --ro-bind /proc /proc
       --bind "${scratch}" "${scratch}"
       --setenv TMPDIR "${scratch}"
