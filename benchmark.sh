@@ -52,17 +52,25 @@ if command -v bwrap >/dev/null 2>&1; then
   elif command -v setpriv >/dev/null 2>&1; then
     bw=( setpriv --no-new-privs bwrap )
   fi
+  # With --cap-drop ALL even a root-run sandbox loses CAP_DAC_OVERRIDE and
+  # cannot traverse a 0750 $HOME (GitHub runners). Re-bind the repo at a
+  # world-traversable scratch-anchored path and run from there — the staging
+  # move the reference challenge makes for the same reason.
+  sandbox_repo="${scratch}/repo"
+  mkdir -p "${sandbox_repo}"
+  sandbox_vpy="${sandbox_repo}${vpy#"${root}"}"
   run_verify=(
     "${bw[@]}"
       --ro-bind / / --dev /dev --ro-bind /proc /proc
       --bind "${scratch}" "${scratch}"
+      --ro-bind "${root}" "${sandbox_repo}"
       --setenv TMPDIR "${scratch}"
       --setenv HEESCH_SCORE_DIR "${scratch}"
       --setenv PYTHONHASHSEED 0
-      --chdir "${root}"
+      --chdir "${sandbox_repo}"
       --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup
       --cap-drop ALL --new-session --die-with-parent
-      -- "${vpy}" -I -m harness.verify
+      -- "${sandbox_vpy}" -I -m harness.verify
   )
 elif [[ "$(uname -s)" == "Darwin" ]] && command -v sandbox-exec >/dev/null 2>&1; then
   profile="(version 1)(allow default)(deny network*)(deny file-write*)(allow file-write* (subpath \"${scratch}\"))(allow file-write* (subpath \"/dev\"))"
