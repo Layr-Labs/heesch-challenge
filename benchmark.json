@@ -5,9 +5,9 @@
   "category": "math",
   "direction": "+",
   "editablePaths": ["submission"],
-  "setupCommand": ["bash", "-lc", "pip install ."],
-  "benchmarkCommand": ["bash", "-lc", "PYTHONHASHSEED=0 python -P -m harness.verify"],
-  "scorePath": ".yukon/score.json",
+  "setupCommand": ["bash", "-lc", "./setup.sh"],
+  "benchmarkCommand": ["bash", "-lc", "./benchmark.sh"],
+  "scorePath": "score.json",
   "minScoreImprovementBips": 0,
   "maxSubmissionBytes": 4194304,
   "runner": {

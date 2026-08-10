@@ -5,4 +5,7 @@ files:
   lrat-check.c sha256=bf07c2ac96b9035da1ebcc578cb95e956a2b795629d613154cdb307f8a8f4a95
   LICENSE sha256=71ab2a9dc5a294ad8fba4ccb8c45aaa8a439596d314a2a046ac9b62266872a18
 build: cc -O2 -o drat-trim drat-trim.c ; cc -O2 -o lrat-check lrat-check.c
-success-signal: stdout line "s VERIFIED" (never trust exit codes alone)
+success-signal: exact stdout line per tool — drat-trim: "s VERIFIED";
+  lrat-check: "c VERIFIED" (lrat-check.c:490). Never trust exit codes; never
+  substring-match (drat-trim.c:858 prints a non-verdict "c VERIFIED
+  derivation: ..." progress line).

@@ -25,10 +25,12 @@ jobs:
         run: bash tools/build_checkers.sh
       - name: Tests
         run: python -m pytest tests/ -q
-      - name: Harness rejects tampering (e2e)
+      - name: Harness e2e via the real scripts
         if: runner.os == 'Linux'
         run: |
-          # The committed baseline must produce a score via the real entrypoint.
-          rm -f .yukon/score.json
-          PYTHONHASHSEED=0 python -P -m harness.verify
-          test -f .yukon/score.json
+          # The committed baseline must produce a score via setup.sh +
+          # benchmark.sh exactly as Yukon runs them (sandbox included).
+          bash ./setup.sh
+          bash ./benchmark.sh
+          test -f score.json
+          jq -er '.score | select(type == "number")' score.json

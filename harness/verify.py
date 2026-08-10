@@ -1,4 +1,4 @@
-"""Yukon evaluator: grade submission/best.heesch, write .yukon/score.json.
+"""Yukon evaluator: grade submission/best.heesch, write score.json (root; HEESCH_SCORE_DIR overrides for the sandbox).
 
 Run as `PYTHONHASHSEED=0 python -P -m harness.verify` from the repo root.
 
@@ -23,9 +23,14 @@ from heesch_verify.gates import IsohedralGate, Verdict
 from heesch_verify.result import Result
 from heesch_verify.witness import VerifyConfig, verify_witness
 
+import os
+
 ROOT = pathlib.Path.cwd()
 SHAPE_PATH = ROOT / "submission" / "best.heesch"
-SCORE_PATH = ROOT / ".yukon" / "score.json"
+# benchmark.sh points HEESCH_SCORE_DIR at a sandbox scratch dir and copies
+# the score to the repo root only after full success; direct invocations
+# write to the repo root themselves.
+SCORE_PATH = pathlib.Path(os.environ.get("HEESCH_SCORE_DIR", str(ROOT))) / "score.json"
 MAX_SHAPE_BYTES = 2 * 1024 * 1024
 
 
@@ -69,6 +74,13 @@ def _score_payload(result: Result, defect_res, gate: Verdict) -> dict:
 
 
 def main() -> None:
+    # Review finding 2: a stale score must never survive into a failed run
+    # (benchmark.sh also wipes the repo-root copy before anything fallible).
+    try:
+        SCORE_PATH.unlink()
+    except OSError:
+        pass
+
     text = _strict_load_text(SHAPE_PATH, MAX_SHAPE_BYTES)
 
     config = VerifyConfig()

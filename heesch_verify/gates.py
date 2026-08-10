@@ -53,23 +53,32 @@ class IsohedralGate:
         if known and canonical_digest(cells, self.grid, True) in known:
             return Verdict.TILER
 
+        gid = self.grid.grid_id
         try:
-            word = boundary.boundary_word(cells, self.grid)
+            if gid == "O":
+                word, n_dirs = boundary.boundary_word(cells, self.grid), 4
+            elif gid == "H":
+                word, n_dirs = boundary.hex_boundary_word(cells, self.grid), 6
+            else:
+                # Iamond boundary words not implemented; the digest table
+                # covers I through n=9 (gap documented in CONVENTIONS.md).
+                return Verdict.INCONCLUSIVE
         except (boundary.UnsupportedGrid, boundary.BoundaryError):
             return Verdict.INCONCLUSIVE
         if len(word) > boundary.MAX_BOUNDARY:
             return Verdict.INCONCLUSIVE
-        if boundary.translation_criterion(word):
+        if boundary.translation_criterion(word, n_dirs):
             return Verdict.TILER
-        if boundary.conway_criterion(word):
+        if boundary.conway_criterion(word, n_dirs):
             return Verdict.TILER
-        if boundary.quarter_turn_criterion(word):
+        if n_dirs == 4 and boundary.quarter_turn_criterion(word):
             return Verdict.TILER
-        # Reflection factorization forms (Langerman–Winslow types 4–7) are
-        # deliberately not implemented yet: a wrong TILER verdict rejects a
-        # legitimate submission, so each form ships only after differential
-        # validation against heesch-sat classifications. Their absence only
-        # weakens the filter, never soundness.
+        # Reflection factorization forms (Langerman–Winslow types 4–7) and
+        # the hex 60/120-degree rotation forms are deliberately not
+        # implemented yet: a wrong TILER verdict rejects a legitimate
+        # submission, so each form ships only after differential validation
+        # against heesch-sat classifications. Their absence only weakens the
+        # filter, never soundness.
         return Verdict.INCONCLUSIVE
 
 

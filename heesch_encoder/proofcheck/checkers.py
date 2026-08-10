@@ -1,6 +1,9 @@
-"""Checker subprocess wrappers. Success is the literal `s VERIFIED` line on
-stdout — exit codes are NOT a reliable signal from drat-trim. Timeout / OOM
-map to RESOURCE_EXCEEDED (requeueable), everything else to failure."""
+"""Checker subprocess wrappers. Success is a checker-specific, LINE-ANCHORED
+verdict on stdout — exit codes are NOT a reliable signal from drat-trim, and
+substring matching is unsound (drat-trim prints a non-verdict
+`c VERIFIED derivation: ...` progress line; lrat-check's actual verdict is
+`c VERIFIED`, not `s VERIFIED`). Any line containing NOT VERIFIED forces
+failure regardless. Timeout / OOM map to RESOURCE_EXCEEDED (requeueable)."""
 
 from __future__ import annotations
 
@@ -28,6 +31,28 @@ class CheckResult:
     detail: str = ""
 
 
+def _verdict(out: str, success_line) -> bool:
+    """True iff some stdout/stderr line satisfies the checker's success
+    predicate AND no line anywhere says NOT VERIFIED."""
+    lines = [ln.strip().lstrip("\r") for ln in out.split("\n")]
+    if any("NOT VERIFIED" in ln for ln in lines):
+        return False
+    return any(success_line(ln) for ln in lines)
+
+
+# Per-checker verdict lines, verified against the vendored sources:
+#   drat-trim.c:1480-1483  ->  "s VERIFIED" / "s NOT VERIFIED"
+#     (drat-trim.c:858 also prints "c VERIFIED derivation: ..." — a progress
+#      line, NOT a verdict; exact-line matching excludes it)
+#   lrat-check.c:490/496   ->  "c VERIFIED" / "c NOT VERIFIED"
+#   cake_lpr               ->  "s VERIFIED UNSAT"
+_SUCCESS = {
+    "drat-trim": lambda ln: ln == "s VERIFIED",
+    "lrat-check": lambda ln: ln == "c VERIFIED",
+    "cake_lpr": lambda ln: ln.startswith("s VERIFIED"),
+}
+
+
 def _run(name: str, args: list[str], timeout: float) -> CheckResult:
     exe = _BIN / (name + (".exe" if os.name == "nt" else ""))
     if not exe.exists():
@@ -47,7 +72,7 @@ def _run(name: str, args: list[str], timeout: float) -> CheckResult:
         return CheckResult(name, CheckStatus.RESOURCE_EXCEEDED, time.time() - t0, "oom")
     dt = time.time() - t0
     out = proc.stdout + "\n" + proc.stderr
-    if "s VERIFIED" in out:
+    if _verdict(out, _SUCCESS[name]):
         return CheckResult(name, CheckStatus.VERIFIED, dt)
     return CheckResult(name, CheckStatus.NOT_VERIFIED, dt, out[-500:])
 

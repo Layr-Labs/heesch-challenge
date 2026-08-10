@@ -93,13 +93,13 @@ def boundary_word(cells, grid: Grid) -> list[int]:
     return word
 
 
-def _comp(d: int) -> int:
-    return (d + 2) % 4
+def _comp(d: int, n_dirs: int = 4) -> int:
+    return (d + n_dirs // 2) % n_dirs
 
 
-def _hat(w: list[int]) -> list[int]:
+def _hat(w: list[int], n_dirs: int = 4) -> list[int]:
     """Reversed complement: the same boundary run walked backwards."""
-    return [_comp(d) for d in reversed(w)]
+    return [_comp(d, n_dirs) for d in reversed(w)]
 
 
 def _is_centrosymmetric(w: list[int]) -> bool:
@@ -115,7 +115,7 @@ def _rotations(w: list[int]):
         yield w[i:] + w[:i]
 
 
-def translation_criterion(word: list[int]) -> bool:
+def translation_criterion(word: list[int], n_dirs: int = 4) -> bool:
     """Beauquier–Nivat A B C Â B̂ Ĉ factorization over all rotations."""
     n = len(word)
     if n == 0 or n % 2 != 0 or n > MAX_BOUNDARY:
@@ -123,12 +123,12 @@ def translation_criterion(word: list[int]) -> bool:
     half = n // 2
     for w in _rotations(word):
         for i in range(half + 1):
-            if w[half:half + i] != _hat(w[:i]):
+            if w[half:half + i] != _hat(w[:i], n_dirs):
                 continue
             for j in range(i, half + 1):
-                if w[half + i:half + j] != _hat(w[i:j]):
+                if w[half + i:half + j] != _hat(w[i:j], n_dirs):
                     continue
-                if w[half + j:] == _hat(w[j:half]):
+                if w[half + j:] == _hat(w[j:half], n_dirs):
                     return True
     return False
 
@@ -163,7 +163,7 @@ def quarter_turn_criterion(word: list[int]) -> bool:
     return False
 
 
-def conway_criterion(word: list[int]) -> bool:
+def conway_criterion(word: list[int], n_dirs: int = 4) -> bool:
     """Conway A B C D E F factorization (D = Â; B, C, E, F palindromes)
     over all rotations."""
     n = len(word)
@@ -178,7 +178,7 @@ def conway_criterion(word: list[int]) -> bool:
 
     for w in _rotations(word):
         for la in range(n // 2 + 1):
-            a_hat = _hat(w[:la])
+            a_hat = _hat(w[:la], n_dirs)
             for k in range(la, n - la + 1):
                 if w[k:k + la] != a_hat:
                     continue
@@ -187,3 +187,98 @@ def conway_criterion(word: list[int]) -> bool:
                 ):
                     return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Hex boundary words (review finding 1b). Vertex coordinates follow
+# heesch-sat's hexgrid.h scheme: cell (q, r) has vertex centre 3*(q, r) and
+# six corners at the offsets below, listed counterclockwise. The travel
+# alphabet is the six corner-to-corner vectors, indexed so that the opposite
+# direction is +3 mod 6 — which is what _hat/_comp(n_dirs=6) require.
+
+_HEX_CORNERS = ((1, 1), (-1, 2), (-2, 1), (-1, -1), (1, -2), (2, -1))
+_HEX_TRAVEL = tuple(
+    (_HEX_CORNERS[(i + 1) % 6][0] - _HEX_CORNERS[i][0],
+     _HEX_CORNERS[(i + 1) % 6][1] - _HEX_CORNERS[i][1])
+    for i in range(6)
+)
+_HEX_TRAVEL_INDEX = {v: i for i, v in enumerate(_HEX_TRAVEL)}
+# CCW walk with interior on the left: prefer the sharpest right turn at
+# multi-choice (pinch) vertices, mirroring the square walker's rule.
+_HEX_TURN_PREFERENCE = (5, 4, 0, 1, 2, 3)
+
+
+def _hex_side_corners(grid):
+    """For each neighbor direction index d, the (i, j) corner indices of the
+    shared edge, oriented so corner[i] -> corner[j] walks CCW around the
+    cell (interior on the left). Computed from the grid tables at first use
+    rather than hand-transcribed."""
+    out = []
+    for d, (dq, dr) in enumerate(grid._NEIGH):
+        shared = []
+        for i, (ox, oy) in enumerate(_HEX_CORNERS):
+            # corner of this cell (centre 0,0): (ox, oy); corners of the
+            # neighbor: 3*(dq,dr) + offsets. Shared iff present in both sets.
+            if any(ox == 3 * dq + nx and oy == 3 * dr + ny
+                   for nx, ny in _HEX_CORNERS):
+                shared.append(i)
+        assert len(shared) == 2, (d, shared)
+        i, j = shared
+        # CCW order around the cell: j must be i+1 (mod 6)
+        if (i + 1) % 6 == j:
+            out.append((i, j))
+        else:
+            assert (j + 1) % 6 == i
+            out.append((j, i))
+    return tuple(out)
+
+
+_hex_side_corner_cache = {}
+
+
+def hex_boundary_word(cells, grid) -> list[int]:
+    """Trace the outer boundary of a hole-free, edge-connected polyhex
+    counterclockwise; return the 6-letter direction word."""
+    key = id(type(grid))
+    if key not in _hex_side_corner_cache:
+        _hex_side_corner_cache[key] = _hex_side_corners(grid)
+    side_corners = _hex_side_corner_cache[key]
+    cellset = frozenset(cells)
+
+    out_edges: dict[tuple[int, int], list[int]] = {}
+    total = 0
+    for (q, r) in cellset:
+        for d, n in enumerate(grid.edge_neighbors((q, r))):
+            if n in cellset:
+                continue
+            i, j = side_corners[d]
+            vi = (3 * q + _HEX_CORNERS[i][0], 3 * r + _HEX_CORNERS[i][1])
+            letter = (i + 0) % 6  # travel vector corner[i]->corner[i+1]
+            out_edges.setdefault(vi, []).append(letter)
+            total += 1
+
+    start = min(out_edges)
+    d0 = min(out_edges[start])
+    word: list[int] = []
+    cur, d = start, d0
+    remaining = {v: set(ds) for v, ds in out_edges.items()}
+    for _ in range(total):
+        remaining[cur].discard(d)
+        word.append(d)
+        vec = _HEX_TRAVEL[d]
+        cur = (cur[0] + vec[0], cur[1] + vec[1])
+        if cur == start and not any(remaining.values()):
+            break
+        cands = remaining.get(cur)
+        if not cands:
+            raise BoundaryError(f"hex walk dead-ends at {cur}")
+        for delta in _HEX_TURN_PREFERENCE:
+            nd = (d + delta) % 6
+            if nd in cands:
+                d = nd
+                break
+        else:
+            raise BoundaryError(f"no continuation at {cur}")
+    if len(word) != total:
+        raise BoundaryError("hex outer boundary is not a single cycle")
+    return word

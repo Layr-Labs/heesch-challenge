@@ -32,7 +32,7 @@ def _run_harness(tmp_path, shape_text: str):
         [sys.executable, "-P", "-m", "harness.verify"],
         cwd=repo, env=env, capture_output=True, text=True, timeout=300,
     )
-    score_path = repo / ".yukon" / "score.json"
+    score_path = repo / "score.json"
     score = json.loads(score_path.read_text()) if score_path.exists() else None
     return proc, score
 
@@ -87,7 +87,7 @@ def test_missing_file_rejected(tmp_path):
         cwd=repo, env=env, capture_output=True, text=True, timeout=300,
     )
     assert proc.returncode != 0
-    assert not (repo / ".yukon" / "score.json").exists()
+    assert not (repo / "score.json").exists()
 
 
 def test_shadowing_harness_is_ignored(tmp_path):
@@ -96,8 +96,7 @@ def test_shadowing_harness_is_ignored(tmp_path):
     repo = tmp_path / "repo"
     (repo / "submission").mkdir(parents=True)
     (repo / "submission" / "best.heesch").write_text(BASELINE, encoding="ascii")
-    evil = 'import json, pathlib\npathlib.Path(".yukon").mkdir(exist_ok=True)\n' \
-           'json.dump({"score": 999}, open(".yukon/score.json", "w"))\n'
+    evil = 'import json\njson.dump({"score": 999}, open("score.json", "w"))\n'
     (repo / "submission" / "harness.py").write_text(evil)
     (repo / "submission" / "sitecustomize.py").write_text(evil)
     (repo / "sitecustomize.py").write_text(evil)
@@ -111,7 +110,7 @@ def test_shadowing_harness_is_ignored(tmp_path):
         cwd=repo, env=env, capture_output=True, text=True, timeout=300,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    score = json.loads((repo / ".yukon" / "score.json").read_text())
+    score = json.loads((repo / "score.json").read_text())
     assert score["score"] == 1.0, "hostile shadowing changed the score!"
 
 
@@ -129,3 +128,48 @@ def test_defect_block_scores_gradient(tmp_path):
     assert score["score"] == 1.0
     assert score["metrics"]["defect_required"] == len(R)
     assert "defect_achieved" in score["metrics"]["verified_claim"]
+
+
+def test_p0_monohex_tiler_rejected(tmp_path):
+    """Review finding 1 reproducer: a monohex (obvious plane tiler) with two
+    complete coronas must be REJECTED by the gate, not scored 2.0."""
+    def ring(k):
+        if k == 0:
+            return [(0, 0)]
+        out = []
+        for q in range(-k, k + 1):
+            for r in range(-k, k + 1):
+                if (abs(q) + abs(r) + abs(q + r)) // 2 == k:
+                    out.append((q, r))
+        return out
+
+    lines = ["H 0 0", "~ 2 2 1"]
+    placements = []
+    for k in (0, 1, 2):
+        for (q, r) in ring(k):
+            placements.append(f"{k} <1,0,{q},0,1,{r}>")
+    lines.append(str(len(placements)))
+    lines.extend(placements)
+    proc, score = _run_harness(tmp_path, "\n".join(lines) + "\n")
+    assert proc.returncode != 0 and score is None
+    assert "GATE_IS_TILER" in proc.stdout
+
+
+def test_stale_score_removed_on_failure(tmp_path):
+    """Review finding 2: a failing run must remove any pre-existing score,
+    not leave the old trusted result in place."""
+    repo = tmp_path / "repo"
+    (repo / "submission").mkdir(parents=True)
+    (repo / "submission" / "best.heesch").write_text("garbage\n", encoding="ascii")
+    (repo / "score.json").write_text('{"score": 999}')
+    env = {
+        "PYTHONHASHSEED": "0",
+        "PYTHONPATH": str(ROOT),
+        "SYSTEMROOT": __import__("os").environ.get("SYSTEMROOT", ""),
+    }
+    proc = subprocess.run(
+        [sys.executable, "-P", "-m", "harness.verify"],
+        cwd=repo, env=env, capture_output=True, text=True, timeout=300,
+    )
+    assert proc.returncode != 0
+    assert not (repo / "score.json").exists(), "stale score survived a failed run"

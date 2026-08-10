@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools>=68"]
+# Exact pin (review finding 4): an open bound lets setup download whatever
+# setuptools ships next, drifting benchmark integrity. Bumping this is a
+# deliberate change, not ambient.
+requires = ["setuptools==84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]

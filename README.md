@@ -66,9 +66,16 @@ them in your search loop; they are API.
 
 ## Rules that will reject your submission
 
-- Plane-tilers score nothing: an isohedral tiling is detected and rejected
-  (`GATE_IS_TILER`). Anisohedral tilers stall at `PENDING_GATE` and never
-  reach the board without an exactness proof.
+- **Plane-tiler screening** (`GATE_IS_TILER`) is constructive, in two layers:
+  boundary-word factorization criteria (squares: translation, half-turn,
+  quarter-turn; hexes: translation, half-turn) prove tilings of any size,
+  and exhaustive known-tiler tables cover every polyomino ≤ 8 cells, every
+  polyhex ≤ 6, and every polyiamond ≤ 9. A large tiler outside both layers
+  can hold a lower-bound entry — the claim `Hc ≥ k` is mathematically true
+  even for tilers — but it is hollow, is purged when identified, and can
+  never reach the record tier: record-tier promotion requires a
+  machine-checked proof that simultaneously establishes non-tilerhood
+  (`PENDING_GATE` policy, architecture spec §2.2–2.3).
 - The tile must be edge-connected and hole-free; every inner corona must be
   simply connected; transforms must be genuine grid symmetries (det ±1 is
   not enough — shears are rejected).
@@ -95,7 +102,7 @@ This is a schema v1 (single-track) benchmark — no tracks; `yukon tracks` /
 |---|---|
 | `heesch_verify/` | The witness verifier (stdlib-only) — import it in your loop |
 | `heesch_encoder/` | Frozen CNF encoder + proof pipeline (record tier) |
-| `harness/` | Yukon evaluator: grades `submission/best.heesch`, writes `.yukon/score.json` |
+| `harness/` | Yukon evaluator: grades `submission/best.heesch`, writes root `score.json` |
 | `submission/` | **The only path you may edit** |
 | `docs/CONVENTIONS.md` | The frozen geometry conventions (epoch v1) |
 | `tests/` | Calibration, adversarial, metamorphic, fuzz, encoder round-trip suites |
