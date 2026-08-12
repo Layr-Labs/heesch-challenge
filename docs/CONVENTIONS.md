@@ -55,7 +55,12 @@ all grids. det = ±1 alone is never sufficient (shears).
    miss (rotation-form-only and anisohedral ones).
 
 Known gaps, by design: iamond boundary words are not implemented (table
-covers n ≤ 9); boundary words longer than 160 edges are not tested (the
-criteria are O(n³)). Such shapes fall through to INCONCLUSIVE and the record
-tier's proof requirement. The gate never returns NON_TILER: anisohedral
+covers n ≤ 9), and the factorization criteria miss rotation-form-only and
+anisohedral tilers larger than the tables (O > 8 cells, H > 6). The boundary
+caps (410 square / 810 hex edges) sit above the longest boundary any legal
+shape can have — a hole-free n-cell polyomino has perimeter ≤ 2n+2 = 402 at
+the 200-cell cap, a polyhex ≤ 4n+2 = 802 — so the criteria run on every
+submittable O/H shape (the O(n³) worst case is seconds at 402 edges, only on
+long-boundary shapes). Uncovered shapes fall through to INCONCLUSIVE and the
+record tier's proof requirement. The gate never returns NON_TILER: anisohedral
 tilers exist, so failed criteria prove nothing (INCONCLUSIVE).

@@ -15,16 +15,27 @@ walking the outer boundary counterclockwise (interior on the left). Criteria:
 Failing both proves nothing (rotation-only and anisohedral tilers exist);
 callers treat no-match as INCONCLUSIVE, never NON_TILER.
 
-Boundary words longer than MAX_BOUNDARY are not tested (the criteria are
-O(n^3)); such shapes fall through to INCONCLUSIVE. Compact tilers — the
-realistic cheat submissions — have short boundaries.
+Boundary words longer than the per-grid cap are not tested (the criteria are
+O(n^3)). The caps sit above the longest boundary any submittable shape can
+have — a hole-free connected n-cell polyomino has perimeter <= 2n+2 = 402 at
+the 200-cell cap, a polyhex <= 4n+2 = 802 — so layer 1 runs on EVERY legal
+shape. (Audit finding V1: the old flat cap of 160 let a 132-cell
+translation-tiling comb with boundary 178 skip the criteria, evade the
+<= 8-cell tiler table, and score 5.0.)
 """
 
 from __future__ import annotations
 
 from .grids import Grid, SquareGrid
 
-MAX_BOUNDARY = 160
+# Above the maxima: 402 (square) / 802 (hex) edges at the 200-cell cap.
+MAX_BOUNDARY_SQUARE = 410
+MAX_BOUNDARY_HEX = 810
+
+
+def max_boundary(n_dirs: int) -> int:
+    """Longest boundary word tested for a grid: 4 directions (square) or 6 (hex)."""
+    return MAX_BOUNDARY_SQUARE if n_dirs == 4 else MAX_BOUNDARY_HEX
 
 _TURN_PREFERENCE = (3, 0, 1)  # right turn, straight, left turn (mod 4 deltas)
 
@@ -118,7 +129,7 @@ def _rotations(w: list[int]):
 def translation_criterion(word: list[int], n_dirs: int = 4) -> bool:
     """Beauquier–Nivat A B C Â B̂ Ĉ factorization over all rotations."""
     n = len(word)
-    if n == 0 or n % 2 != 0 or n > MAX_BOUNDARY:
+    if n == 0 or n % 2 != 0 or n > max_boundary(n_dirs):
         return False
     half = n // 2
     for w in _rotations(word):
@@ -151,7 +162,7 @@ def quarter_turn_criterion(word: list[int]) -> bool:
     (factors may be empty). Constructive: yields an isohedral tiling using
     90° rotations."""
     n = len(word)
-    if n == 0 or n > MAX_BOUNDARY:
+    if n == 0 or n > MAX_BOUNDARY_SQUARE:
         return False
     for w in _rotations(word):
         for i in range(n + 1):
@@ -167,7 +178,7 @@ def conway_criterion(word: list[int], n_dirs: int = 4) -> bool:
     """Conway A B C D E F factorization (D = Â; B, C, E, F palindromes)
     over all rotations."""
     n = len(word)
-    if n == 0 or n > MAX_BOUNDARY:
+    if n == 0 or n > max_boundary(n_dirs):
         return False
 
     def splits_into_two_palindromes(w: list[int]) -> bool:
