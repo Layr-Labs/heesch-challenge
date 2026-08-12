@@ -46,12 +46,30 @@ class IsohedralGate:
             IsohedralGate._KNOWN = _load_known_tilers()
 
     def check(self, cells) -> Verdict:
+        return self.check_detailed(cells)[0]
+
+    def check_detailed(self, cells) -> tuple[Verdict, str]:
+        """check() plus a machine-readable detail naming WHICH constructive
+        proof fired (TILER) or WHY an INCONCLUSIVE shape escaped evaluation:
+
+          tiler:*                  — constructive proof (table / criterion)
+          unchecked:iamond_beyond_table — I grid, n > 9: the gate never
+                                     evaluated the shape (audit finding V2 —
+                                     every such tiler evades by construction)
+          unchecked:boundary_*     — word extraction failed / over cap
+          evaluated:table_exhaustive — below the table cap; table absence is
+                                     a published-census non-tiler proof
+          evaluated:no_factorization — the full layer ran, nothing matched
+
+        Board consumers should treat `unchecked:*` entries as presumptively
+        hollow; honest non-tilers land in `evaluated:*`.
+        """
         from . import boundary
         from .canonical import canonical_digest
 
         known = IsohedralGate._KNOWN.get(self.grid.grid_id)
         if known and canonical_digest(cells, self.grid, True) in known:
-            return Verdict.TILER
+            return Verdict.TILER, "tiler:table"
 
         gid = self.grid.grid_id
         try:
@@ -62,25 +80,31 @@ class IsohedralGate:
             else:
                 # Iamond boundary words not implemented; the digest table
                 # covers I through n=9 (gap documented in CONVENTIONS.md).
-                return Verdict.INCONCLUSIVE
+                if len(cells) > 9:
+                    return Verdict.INCONCLUSIVE, "unchecked:iamond_beyond_table"
+                return Verdict.INCONCLUSIVE, "evaluated:table_exhaustive"
         except (boundary.UnsupportedGrid, boundary.BoundaryError):
-            return Verdict.INCONCLUSIVE
-        # No length pre-check: the criteria's per-grid caps sit above the
-        # longest boundary any legal (<= 200-cell, hole-free) shape can have,
-        # so every submittable O/H shape is evaluated (audit finding V1).
+            return Verdict.INCONCLUSIVE, "unchecked:boundary_error"
+        # Belt-and-braces (audit V1): the per-grid caps sit above the longest
+        # boundary any legal (<= 200-cell, hole-free) shape can have, so this
+        # branch is unreachable for every submittable O/H shape. Kept so that
+        # if the cell cap or perimeter bound ever changes, an over-cap word
+        # segregates as unchecked rather than silently scoring.
+        if len(word) > boundary.max_boundary(n_dirs):
+            return Verdict.INCONCLUSIVE, "unchecked:boundary_length"
         if boundary.translation_criterion(word, n_dirs):
-            return Verdict.TILER
+            return Verdict.TILER, "tiler:translation"
         if boundary.conway_criterion(word, n_dirs):
-            return Verdict.TILER
+            return Verdict.TILER, "tiler:conway"
         if n_dirs == 4 and boundary.quarter_turn_criterion(word):
-            return Verdict.TILER
+            return Verdict.TILER, "tiler:quarter_turn"
         # Reflection factorization forms (Langerman–Winslow types 4–7) and
         # the hex 60/120-degree rotation forms are deliberately not
         # implemented yet: a wrong TILER verdict rejects a legitimate
         # submission, so each form ships only after differential validation
         # against heesch-sat classifications. Their absence only weakens the
         # filter, never soundness.
-        return Verdict.INCONCLUSIVE
+        return Verdict.INCONCLUSIVE, "evaluated:no_factorization"
 
 
 class SatClassifierGate:

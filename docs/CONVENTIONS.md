@@ -64,3 +64,12 @@ submittable O/H shape (the O(n³) worst case is seconds at 402 edges, only on
 long-boundary shapes). Uncovered shapes fall through to INCONCLUSIVE and the
 record tier's proof requirement. The gate never returns NON_TILER: anisohedral
 tilers exist, so failed criteria prove nothing (INCONCLUSIVE).
+
+Every verdict carries a machine-readable `gate_detail` in `score.json`
+metrics (audit finding V2): `tiler:*` names the constructive proof that
+fired; `unchecked:iamond_beyond_table` marks I-grid shapes with n > 9, which
+the gate never evaluates — every such tiler evades by construction, so board
+consumers should treat `unchecked:*` entries as presumptively hollow;
+`evaluated:table_exhaustive` (n within the exhaustive table, hence a
+published-census non-tiler) and `evaluated:no_factorization` mean the full
+layer ran and found nothing — honest non-tilers land there.
