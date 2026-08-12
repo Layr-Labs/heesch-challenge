@@ -51,12 +51,15 @@ def _strict_load_text(path: pathlib.Path, max_bytes: int) -> str:
         raise Reject(f"{path.name} is not valid utf-8: {e}")
 
 
-def _score_payload(result: Result, defect_res, gate: Verdict) -> dict:
+def _score_payload(result: Result, defect_res, gate: Verdict, gate_detail: str) -> dict:
     score = score_mod.yukon_score(result)
     if not math.isfinite(score):
         raise Reject("computed score is not finite")
     metrics = result.to_json()
     metrics["gate_tier"] = f"isohedral_{gate.value.lower()}"
+    # Board-visible hollow-entry marker (audit V2): "unchecked:*" means the
+    # gate never evaluated this shape class — segregate these entries.
+    metrics["gate_detail"] = gate_detail
     if defect_res is not None:
         frac_num = max(0, defect_res.required - defect_res.defect_hc)
         metrics["score_fraction_num"] = frac_num
@@ -119,14 +122,14 @@ def main() -> None:
 
     # Stage 6 — non-tiler gate 1 (cheap filter). A constructive isohedral
     # factorization means infinite Heesch number: reject.
-    gate = IsohedralGate(sub.grid).check(frozenset(sub.cells))
+    gate, gate_detail = IsohedralGate(sub.grid).check_detailed(frozenset(sub.cells))
     if gate is Verdict.TILER:
         raise Reject(
             "GATE_IS_TILER: shape tiles the plane isohedrally; "
             "its Heesch number is not finite"
         )
 
-    payload = _score_payload(result, defect_res, gate)
+    payload = _score_payload(result, defect_res, gate, gate_detail)
     SCORE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(SCORE_PATH, "w", encoding="ascii", newline="\n") as fh:
         json.dump(payload, fh, sort_keys=True)
