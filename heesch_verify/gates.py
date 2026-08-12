@@ -65,8 +65,9 @@ class IsohedralGate:
                 return Verdict.INCONCLUSIVE
         except (boundary.UnsupportedGrid, boundary.BoundaryError):
             return Verdict.INCONCLUSIVE
-        if len(word) > boundary.MAX_BOUNDARY:
-            return Verdict.INCONCLUSIVE
+        # No length pre-check: the criteria's per-grid caps sit above the
+        # longest boundary any legal (<= 200-cell, hole-free) shape can have,
+        # so every submittable O/H shape is evaluated (audit finding V1).
         if boundary.translation_criterion(word, n_dirs):
             return Verdict.TILER
         if boundary.conway_criterion(word, n_dirs):
