@@ -97,7 +97,8 @@ def verify_witness(text: str, config: VerifyConfig | None = None) -> WitnessOutc
         # interpret: a hole in its outermost corona downgrades hc to L-1
         # (P_{L-1} is verified hole-free) while still establishing Hh >= L.
         c1 = patch.check_corona(
-            info.cells, sub.patches[0], grid, contact, hole_mode="hh"
+            info.cells, sub.patches[0], grid, contact, hole_mode="hh",
+            max_work=patch.MAX_CORONA_WORK,
         )
         if c1.has_outer_holes:
             if config.strict_claims:
@@ -119,7 +120,8 @@ def verify_witness(text: str, config: VerifyConfig | None = None) -> WitnessOutc
 
     if sub.patch_count == 2:
         c2 = patch.check_corona(
-            info.cells, sub.patches[1], grid, contact, hole_mode="hh"
+            info.cells, sub.patches[1], grid, contact, hole_mode="hh",
+            max_work=patch.MAX_CORONA_WORK,
         )
         hh_verified = max(hh_verified, c2.max_level)
 

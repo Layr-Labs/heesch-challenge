@@ -18,6 +18,21 @@ from .shape import holes_of
 from .transform import Xform
 
 MAX_LEVELS = 64  # resource bound, far above the corona search cap of 12
+# Audit V4: MAX_LEVELS alone bounds depth but not total work — a deep patch of
+# large per-level coronas (nested translation rings) runs stages 5c/5d ~L times
+# over the whole accumulated patch, ~380 s for a valid 64-level 196-cell
+# witness. This budget caps the cumulative cells-times-levels those loops touch
+# (contact_neighbors in 5c, the flood fill in 5d), bringing that worst case
+# down to ~15 s — a >20x cut, well within CI budgets. The ceiling is set for
+# benchmark integrity, not tightness: a maximal hole-free hc=12 witness (the
+# corona search cap) of a 200-cell tile is ~1.2M, and even an unprecedented
+# hc~30 witness (the class record is 4) stays under this, so a genuine
+# discovery is never rejected. Only deep or ring-inflated abuse patches reach
+# it. It is a resource bound, not a frozen convention, so no epoch bump is
+# needed (lowering MAX_LEVELS toward 12 is the deferred epoch-2 change).
+# Applied only on the participant path (witness.py); the encoder oracle passes
+# max_work=None so its large round-trip patches are unaffected.
+MAX_CORONA_WORK = 8_000_000
 
 
 def contact_neighbors(cells, contact: Contact) -> frozenset:
@@ -72,7 +87,8 @@ HOLE_MODES = ("hc", "hh", "none")
 
 def check_corona(shape_cells, placements, grid: Grid, contact: Contact,
                  *, hole_mode: str,
-                 max_levels: int = MAX_LEVELS) -> CoronaResult:
+                 max_levels: int = MAX_LEVELS,
+                 max_work: int | None = None) -> CoronaResult:
     """Stages 5a–5d on one patch. `placements` is a sequence of
     (submitted_level, Xform); transforms are assumed already
     symmetry-checked (Stage 4 runs in witness.py).
@@ -167,8 +183,17 @@ def check_corona(shape_cells, placements, grid: Grid, contact: Contact,
     level_cells = {lvl: frozenset(s) for lvl, s in tmp.items()}
 
     # 5c — surround condition, the check that actually matters.
+    # `work` accumulates the cells-times-levels the per-level passes touch
+    # (audit V4); both 5c and 5d rescan the growing patch each level.
+    work = 0
     inner = set(level_cells[0])
     for i in range(1, max_level + 1):
+        work += len(inner)
+        if max_work is not None and work > max_work:
+            raise VerifyError(
+                ErrorCode.RESOURCE_EXCEEDED,
+                f"corona work budget exceeded at level {i} ({work} > {max_work})",
+            )
         gap = contact_neighbors(inner, contact) - level_cells[i]
         if gap:
             sample = tuple(sorted(gap))[:5]
@@ -187,6 +212,12 @@ def check_corona(shape_cells, placements, grid: Grid, contact: Contact,
         has_outer_holes = bool(holes_of(frozenset(acc), grid))
     else:
         for i in range(1, max_level + 1):
+            work += len(acc)
+            if max_work is not None and work > max_work:
+                raise VerifyError(
+                    ErrorCode.RESOURCE_EXCEEDED,
+                    f"corona work budget exceeded at level {i} ({work} > {max_work})",
+                )
             acc.update(level_cells[i])
             hs = holes_of(frozenset(acc), grid)
             if hs:
