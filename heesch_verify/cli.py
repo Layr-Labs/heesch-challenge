@@ -37,7 +37,8 @@ def main(argv=None) -> int:
         # #DEFECT marker line onward.
         out_lines = []
         for line in text.split("\n"):
-            if line.lstrip().startswith("#DEFECT"):
+            toks = line.split()
+            if toks and toks[0] == "#DEFECT":  # exact marker token (audit V7)
                 break
             out_lines.append(line)
         body = "\n".join(out_lines).rstrip("\n") + "\n"

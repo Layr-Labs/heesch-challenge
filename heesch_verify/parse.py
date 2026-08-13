@@ -24,6 +24,14 @@ _PLACEMENT_RE = re.compile(
 Placement = tuple[int, Xform]
 
 
+def _is_defect_marker(line: str) -> bool:
+    """True iff the line's first whitespace token is exactly '#DEFECT' (audit
+    V7): the old startswith('#DEFECT') test accepted '#DEFECTXYZ ...' as a
+    defect block, admitting out-of-spec bytes into the record."""
+    toks = line.split()
+    return bool(toks) and toks[0] == "#DEFECT"
+
+
 @dataclass(frozen=True)
 class DefectBlock:
     level: int
@@ -76,6 +84,11 @@ class _Lines:
 
     def assert_exhausted(self):
         for i in range(self.pos, len(self.lines)):
+            # Enforce the line-length cap on trailing lines too (audit V8):
+            # next() enforces it, assert_exhausted did not, so an oversized
+            # whitespace-only trailing line was silently accepted.
+            if len(self.lines[i]) > MAX_LINE_CHARS:
+                raise VerifyError(ErrorCode.PARSE_SYNTAX, f"line {i + 1} too long")
             if self.lines[i].strip():
                 raise VerifyError(
                     ErrorCode.PARSE_SYNTAX,
@@ -118,7 +131,7 @@ def _parse_patch(lines: _Lines, what: str, max_placements: int) -> tuple[Placeme
             raise
         # A stray section marker where a placement should be means the declared
         # count disagrees with the actual line count.
-        if line.lstrip().startswith("#DEFECT"):
+        if _is_defect_marker(line):
             raise VerifyError(
                 ErrorCode.PARSE_COUNT_MISMATCH,
                 f"{what} declares {n} placements but only {i} present before #DEFECT",
@@ -203,10 +216,15 @@ def parse_submission(text: str, *, max_placements: int = 20_000) -> Submission:
         save = lines.pos
         try:
             nxt = lines.next("end of file")
-        except VerifyError:
+        except VerifyError as e:
+            # Re-raise a line-length violation instead of swallowing it as
+            # generic trailing garbage (audit V8); only a clean end-of-file
+            # (no non-blank lines left) should fall through to "no defect".
+            if "too long" in e.message:
+                raise
             nxt = None
         if nxt is not None:
-            if nxt.lstrip().startswith("#DEFECT"):
+            if _is_defect_marker(nxt):
                 dtoks = nxt.split()
                 if len(dtoks) != 5:
                     raise VerifyError(
