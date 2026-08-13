@@ -11,7 +11,10 @@ reproduced for every family included here:
   H n<=5 : ALL free polyhexes tile (first non-tilers at n=6).
   H n=6  : 82 free = 1 holed + 3 corpus non-tilers + 1 PROVEN non-tiler
            (the open F(S,3)-UNSAT shape, hardcoded below) + 77 tilers.
-  I n<=8 : all free polyiamonds tile (first non-tilers at n=9).
+  I n<=6 : all free polyiamonds tile.
+  I n=7  : 24 free = 23 tilers + 1 corpus non-tiler (the V-heptiamond,
+           Hc=Hh=1 exactly by exhaustive corona search).
+  I n=8  : all 66 free octiamonds tile.
   I n=9  : 160 free = 1 holed + 20 corpus non-tilers + 139 tilers.
 
 Holed shapes are excluded (they are rejected upstream, not tilers). The
@@ -47,7 +50,7 @@ OPEN_HEX = frozenset([(0, 0), (0, 1), (0, 2), (1, 2), (2, 2), (3, 1)])
 EXPECTED_NONTILERS = {
     ("O", 7): 3, ("O", 8): 20,
     ("H", 6): 4,
-    ("I", 9): 20,
+    ("I", 7): 1, ("I", 8): 0, ("I", 9): 20,
 }
 
 
