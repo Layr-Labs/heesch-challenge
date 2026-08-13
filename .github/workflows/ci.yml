@@ -1,8 +1,25 @@
 name: CI
 
+# Audit V9: CI must never run a participant-controlled tree. submissions/*
+# refs are graded exclusively by benchmark.yml (sandboxed, surface-checked);
+# this workflow builds/installs/tests the checked-out tree, so it is scoped to
+# maintainer branches only. Never widen this to pull_request or
+# pull_request_target without a sandbox — that reintroduces the RCE surface.
 on:
   push:
+    branches-ignore:
+      - 'submissions/**'
   workflow_dispatch:
+
+# Audit V9: least privilege. No write scope near an install+test of the tree.
+permissions:
+  contents: read
+
+# Audit V11: collapse superseded runs so a burst of pushes cannot fan out into
+# hours of matrix runner-time.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -12,10 +29,14 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python: ["3.11", "3.12"]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # SHA-pinned (audit V9): mutable tags let a compromised action ship code
+      # into the run. persist-credentials:false drops the checkout token.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
       - name: Install
@@ -28,8 +49,9 @@ jobs:
       - name: Harness e2e via the real scripts
         if: runner.os == 'Linux'
         run: |
-          # The committed baseline must produce a score via setup.sh +
-          # benchmark.sh exactly as Yukon runs them (sandbox included).
+          # Smoke-tests the committed baseline on maintainer branches only
+          # (submissions/* never reach this workflow). Yukon grades real
+          # submissions via benchmark.yml.
           bash ./setup.sh
           bash ./benchmark.sh
           test -f score.json
