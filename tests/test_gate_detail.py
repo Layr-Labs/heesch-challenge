@@ -42,11 +42,13 @@ def test_table_hit_names_the_proof():
     )
 
 
-def test_iamond_beyond_table_is_flagged_unchecked():
-    assert IsohedralGate(GRIDS["I"]).check_detailed(IAMOND_TRIANGLE) == (
-        Verdict.INCONCLUSIVE,
-        "unchecked:iamond_beyond_table",
-    )
+def test_iamond_beyond_table_tiler_is_now_caught():
+    # Audit V2, real fix: the >=10-cell iamond tiler that used to score by
+    # default (flagged only as unchecked:iamond_beyond_table in the interim)
+    # is now constructively proven a TILER by the boundary-word criteria.
+    verdict, detail = IsohedralGate(GRIDS["I"]).check_detailed(IAMOND_TRIANGLE)
+    assert verdict is Verdict.TILER
+    assert detail in ("tiler:conway", "tiler:translation")
 
 
 def test_iamond_within_table_cap_is_exhaustively_evaluated():
@@ -71,8 +73,9 @@ def test_honest_nontiler_is_evaluated():
 
 
 def test_check_remains_verdict_only():
-    # Backward-compatible: check() keeps returning a bare Verdict.
-    assert IsohedralGate(GRIDS["I"]).check(IAMOND_TRIANGLE) is Verdict.INCONCLUSIVE
+    # Backward-compatible: check() keeps returning a bare Verdict (== the
+    # check_detailed verdict), here TILER for the side-4 iamond tiler.
+    assert IsohedralGate(GRIDS["I"]).check(IAMOND_TRIANGLE) is Verdict.TILER
 
 
 def test_gate_detail_reaches_score_json(tmp_path):

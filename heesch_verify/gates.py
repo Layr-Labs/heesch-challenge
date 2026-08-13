@@ -53,16 +53,17 @@ class IsohedralGate:
         proof fired (TILER) or WHY an INCONCLUSIVE shape escaped evaluation:
 
           tiler:*                  — constructive proof (table / criterion)
-          unchecked:iamond_beyond_table — I grid, n > 9: the gate never
-                                     evaluated the shape (audit finding V2 —
-                                     every such tiler evades by construction)
           unchecked:boundary_*     — word extraction failed / over cap
-          evaluated:table_exhaustive — below the table cap; table absence is
-                                     a published-census non-tiler proof
+          unchecked:unsupported_grid — no criteria for this grid at all
+          evaluated:table_exhaustive — below the iamond census cap (n <= 9);
+                                     table absence is a published-census
+                                     non-tiler proof
           evaluated:no_factorization — the full layer ran, nothing matched
 
         Board consumers should treat `unchecked:*` entries as presumptively
-        hollow; honest non-tilers land in `evaluated:*`.
+        hollow; honest non-tilers land in `evaluated:*`. (Audit V2: the iamond
+        gate now runs the boundary-word criteria on every polyiamond, so a
+        >=10-cell iamond tiler is caught here instead of scoring by default.)
         """
         from . import boundary
         from .canonical import canonical_digest
@@ -77,12 +78,13 @@ class IsohedralGate:
                 word, n_dirs = boundary.boundary_word(cells, self.grid), 4
             elif gid == "H":
                 word, n_dirs = boundary.hex_boundary_word(cells, self.grid), 6
+            elif gid == "I":
+                # Audit V2: the iamond gate is no longer structurally absent —
+                # the boundary-word criteria now run on every polyiamond, so a
+                # >=10-cell iamond tiler is caught constructively, not scored.
+                word, n_dirs = boundary.iamond_boundary_word(cells, self.grid), 6
             else:
-                # Iamond boundary words not implemented; the digest table
-                # covers I through n=9 (gap documented in CONVENTIONS.md).
-                if len(cells) > 9:
-                    return Verdict.INCONCLUSIVE, "unchecked:iamond_beyond_table"
-                return Verdict.INCONCLUSIVE, "evaluated:table_exhaustive"
+                return Verdict.INCONCLUSIVE, "unchecked:unsupported_grid"
         except (boundary.UnsupportedGrid, boundary.BoundaryError):
             return Verdict.INCONCLUSIVE, "unchecked:boundary_error"
         # Belt-and-braces (audit V1): the per-grid caps sit above the longest
@@ -104,6 +106,10 @@ class IsohedralGate:
         # submission, so each form ships only after differential validation
         # against heesch-sat classifications. Their absence only weakens the
         # filter, never soundness.
+        if gid == "I" and len(cells) <= 9:
+            # The criteria ran AND the iamond census table (n <= 9) is
+            # exhaustive, so absence from it additionally proves non-tilerhood.
+            return Verdict.INCONCLUSIVE, "evaluated:table_exhaustive"
         return Verdict.INCONCLUSIVE, "evaluated:no_factorization"
 
 

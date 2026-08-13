@@ -54,22 +54,28 @@ all grids. det = ±1 alone is never sufficient (shears).
    n ≤ 6, polyiamond n ≤ 9. This also catches small tilers the criteria
    miss (rotation-form-only and anisohedral ones).
 
-Known gaps, by design: iamond boundary words are not implemented (table
-covers n ≤ 9), and the factorization criteria miss rotation-form-only and
-anisohedral tilers larger than the tables (O > 8 cells, H > 6). The boundary
-caps (410 square / 810 hex edges) sit above the longest boundary any legal
-shape can have — a hole-free n-cell polyomino has perimeter ≤ 2n+2 = 402 at
-the 200-cell cap, a polyhex ≤ 4n+2 = 802 — so the criteria run on every
-submittable O/H shape (the O(n³) worst case is seconds at 402 edges, only on
-long-boundary shapes). Uncovered shapes fall through to INCONCLUSIVE and the
-record tier's proof requirement. The gate never returns NON_TILER: anisohedral
-tilers exist, so failed criteria prove nothing (INCONCLUSIVE).
+The boundary-word criteria (Beauquier–Nivat translation and Conway half-turn)
+run on every submittable O, H and I shape — the iamond gate was implemented in
+the 2026-08 audit remediation (finding V2) over a vertex-lattice embedding of
+the triangular grid, validated against the full enumeration of free
+polyiamonds n ≤ 8 (zero false TILER vs the exhaustive census table). The
+boundary caps (410 square / 810 hex-and-iamond edges) sit above the longest
+boundary any legal shape can have — a hole-free n-cell polyomino has perimeter
+≤ 2n+2 = 402 at the 200-cell cap, a polyhex ≤ 4n+2 = 802, a polyiamond ≤ 3n =
+600 — so the criteria run on every submittable shape (the O(n³) worst case is
+seconds at those lengths, only on long-boundary shapes).
+
+Known gaps, by design: the factorization criteria miss rotation-form-only and
+anisohedral tilers larger than the census tables (O > 8 cells, H > 6, I > 9).
+Such shapes fall through to INCONCLUSIVE and the record tier's proof
+requirement. The gate never returns NON_TILER: anisohedral tilers exist, so
+failed criteria prove nothing (INCONCLUSIVE).
 
 Every verdict carries a machine-readable `gate_detail` in `score.json`
 metrics (audit finding V2): `tiler:*` names the constructive proof that
-fired; `unchecked:iamond_beyond_table` marks I-grid shapes with n > 9, which
-the gate never evaluates — every such tiler evades by construction, so board
-consumers should treat `unchecked:*` entries as presumptively hollow;
-`evaluated:table_exhaustive` (n within the exhaustive table, hence a
-published-census non-tiler) and `evaluated:no_factorization` mean the full
-layer ran and found nothing — honest non-tilers land there.
+fired; `unchecked:*` marks a shape the gate could not evaluate (boundary-word
+extraction failed, or an unsupported grid) — board consumers should treat
+those as presumptively hollow; `evaluated:table_exhaustive` (n within an
+exhaustive census table, hence a published-census non-tiler) and
+`evaluated:no_factorization` mean the full layer ran and found nothing —
+honest non-tilers land there.
