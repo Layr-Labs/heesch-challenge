@@ -25,8 +25,8 @@ def _load_known_tilers() -> dict:
     import pathlib
 
     path = pathlib.Path(__file__).parent / "known_tilers.json"
-    if not path.exists():
-        return {}
+    # Fail loud (audit 2026-08): a missing table would silently drop the
+    # gate's strongest layer and let small anisohedral tilers score.
     data = json.loads(path.read_text(encoding="utf-8"))
     return {gid: frozenset(digests) for gid, digests in data.items()}
 

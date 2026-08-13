@@ -18,7 +18,7 @@ def main(argv=None) -> int:
     ap.add_argument(
         "--emit-epoch",
         metavar="OUT",
-        help="write an Epoch-compatible copy (defect block stripped) and exit",
+        help="after successful verification, write an Epoch-compatible copy (defect block stripped)",
     )
     args = ap.parse_args(argv)
 
@@ -32,19 +32,6 @@ def main(argv=None) -> int:
         print(json.dumps({"error": "PARSE_SYNTAX", "message": f"not utf-8: {e}"}))
         return 1
 
-    if args.emit_epoch:
-        # Strip the optional defect block (§9.2.7): everything from the
-        # #DEFECT marker line onward.
-        out_lines = []
-        for line in text.split("\n"):
-            toks = line.split()
-            if toks and toks[0] == "#DEFECT":  # exact marker token (audit V7)
-                break
-            out_lines.append(line)
-        body = "\n".join(out_lines).rstrip("\n") + "\n"
-        with open(args.emit_epoch, "w", encoding="ascii", newline="\n") as fh:
-            fh.write(body)
-
     config = VerifyConfig(
         strict_claims=args.strict,
         allow_reflections=not args.no_reflections,
@@ -54,6 +41,25 @@ def main(argv=None) -> int:
     except VerifyError as e:
         print(json.dumps(e.to_json(), sort_keys=True))
         return 1
+
+    if args.emit_epoch:
+        # Strip the optional defect block (§9.2.7): everything from the
+        # #DEFECT marker line onward. Only a verified witness is exported —
+        # an invalid submission must not leave an "Epoch-compatible" file.
+        out_lines = []
+        for line in text.split("\n"):
+            toks = line.split()
+            if toks and toks[0] == "#DEFECT":  # exact marker token (audit V7)
+                break
+            out_lines.append(line)
+        body = "\n".join(out_lines).rstrip("\n") + "\n"
+        try:
+            with open(args.emit_epoch, "w", encoding="ascii", newline="\n") as fh:
+                fh.write(body)
+        except (OSError, UnicodeEncodeError) as e:
+            print(json.dumps({"error": "IO", "message": f"emit-epoch: {e}"}))
+            return 1
+
     print(outcome.result.to_json_str())
     return 0
 

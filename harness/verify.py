@@ -1,6 +1,9 @@
 """Yukon evaluator: grade submission/best.heesch, write score.json (root; HEESCH_SCORE_DIR overrides for the sandbox).
 
-Run as `PYTHONHASHSEED=0 python -P -m harness.verify` from the repo root.
+Run as `PYTHONHASHSEED=0 python -P -m harness.verify` from the repo root
+(benchmark.sh runs it as `python -I -m harness.verify`, which implies -P and
+ignores the environment; determinism comes from canonical ordering in the
+code, not the hash-seed pin).
 
 Policy (mirrors the verifier architecture §3): the solver's search program
 under submission/ is an inert artifact — nothing there is ever imported or
