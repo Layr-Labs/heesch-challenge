@@ -63,7 +63,16 @@ def _run(name: str, args: list[str], timeout: float) -> CheckResult:
     t0 = time.time()
     try:
         proc = subprocess.run(
-            [str(exe), *args], capture_output=True, text=True, timeout=timeout,
+            [str(exe), *args],
+            capture_output=True,
+            text=True,
+            # F4: hostile proof bytes echoed by the checker must not crash the
+            # decode with an unstructured UnicodeDecodeError — replace instead.
+            errors="replace",
+            # F3: never let a checker read a forged proof from our stdin
+            # (drat-trim -S). We pass proofs by path only.
+            stdin=subprocess.DEVNULL,
+            timeout=timeout,
         )
     except subprocess.TimeoutExpired:
         return CheckResult(name, CheckStatus.RESOURCE_EXCEEDED, time.time() - t0,
