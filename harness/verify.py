@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import math
 import pathlib
+import stat
 import sys
 
 from heesch_verify import VerifyError, defect as defect_mod, score as score_mod
@@ -39,12 +40,28 @@ class Reject(Exception):
 
 
 def _strict_load_text(path: pathlib.Path, max_bytes: int) -> str:
+    # Audit V3/V5: the submission file must be a real regular file, not a
+    # symlink or a device. A symlinked best.heesch would read an arbitrary
+    # runner-readable path (host-file exfil / existence oracle); a character
+    # device (/dev/zero) never EOFs and read_bytes() would exhaust memory into
+    # an unstructured SIGKILL before the size cap engages. O_NOFOLLOW refuses a
+    # symlink at the final component, fstat/S_ISREG refuses every non-regular
+    # file, and the read is bounded to max_bytes+1 so an endless source cannot
+    # blow past the cap.
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
     try:
-        raw = path.read_bytes()
+        fd = os.open(path, flags)
     except OSError as e:
-        raise Reject(f"cannot read {path.name}: {e}")
+        raise Reject(f"SHAPE_NOT_REGULAR_FILE: cannot open {path.name}: {e}")
+    with os.fdopen(fd, "rb", closefd=True) as fh:
+        if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+            raise Reject(f"SHAPE_NOT_REGULAR_FILE: {path.name} is not a regular file")
+        try:
+            raw = fh.read(max_bytes + 1)
+        except OSError as e:
+            raise Reject(f"cannot read {path.name}: {e}")
     if len(raw) > max_bytes:
-        raise Reject(f"{path.name} is {len(raw)} bytes, cap is {max_bytes}")
+        raise Reject(f"{path.name} exceeds the {max_bytes}-byte cap")
     try:
         return raw.decode("utf-8", errors="strict")
     except UnicodeDecodeError as e:

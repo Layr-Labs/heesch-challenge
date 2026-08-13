@@ -49,9 +49,12 @@ def _int(tok: str, what: str) -> int:
     try:
         v = int(tok)
     except ValueError:
-        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"expected integer for {what}, got {tok!r}")
+        # Truncate the echoed token (audit V6): an attacker-controlled first
+        # token can be up to MAX_LINE_CHARS long and would otherwise flood the
+        # CI log verbatim (and amplify V3's exfil channel).
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"expected integer for {what}, got {tok[:80]!r}")
     if abs(v) > MAX_INT:
-        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"oversized integer for {what}: {tok}")
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"oversized integer for {what}: {tok[:80]}")
     return v
 
 
@@ -138,7 +141,8 @@ def parse_submission(text: str, *, max_placements: int = 20_000) -> Submission:
             ErrorCode.PARSE_SYNTAX, "unclassified ('?') record is not a valid submission"
         )
     if len(head) != 1:
-        raise VerifyError(ErrorCode.PARSE_UNKNOWN_GRID, f"bad grid designator {head!r}")
+        # Truncate (audit V6): head is the untrusted first token of the file.
+        raise VerifyError(ErrorCode.PARSE_UNKNOWN_GRID, f"bad grid designator {head[:80]!r}")
     grid = GRIDS.get(head)
     if grid is None:
         raise VerifyError(ErrorCode.PARSE_UNKNOWN_GRID, f"unknown grid {head!r}")

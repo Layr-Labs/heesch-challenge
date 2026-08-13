@@ -49,6 +49,23 @@ jobs:
             esac
           done < <(git diff --no-renames --name-only -z "$GITHUB_SHA^" "$GITHUB_SHA")
 
+          # File-type surface (audit V12): the name-only check above is blind
+          # to entry type, so a symlink (mode 120000) or gitlink (160000) at
+          # submission/best.heesch passes it and would smuggle a host-file
+          # read (V3) into the verifier. Require every entry under submission/
+          # to be a regular blob (100644/100755).
+          while IFS= read -r -d '' rec; do
+            mode=${rec%% *}
+            path=${rec#*$'\t'}
+            case "$mode" in
+              100644|100755) ;;
+              *)
+                echo "Submission entry has non-regular mode $mode: $path" >&2
+                exit 1
+                ;;
+            esac
+          done < <(git ls-tree -r -z "$GITHUB_SHA" -- submission)
+
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
