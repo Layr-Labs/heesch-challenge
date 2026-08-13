@@ -65,6 +65,19 @@ class ProofSubmission:
     claimed_clauses: int
 
 
+def _has_empty_clause(dimacs: bytes) -> bool:
+    """True iff the DIMACS body contains the empty clause — a standalone '0'
+    clause line (audit F5). Comments ('c'), the header ('p ...') and any clause
+    with literals are excluded, so this only fires on a genuine contradiction."""
+    for raw in dimacs.split(b"\n"):
+        line = raw.strip()
+        if not line or line[:1] in (b"c", b"p"):
+            continue
+        if line.split() == [b"0"]:
+            return True
+    return False
+
+
 def store_proof(path: str, store_dir: str) -> str:
     """Content-addressed sidecar storage; hashing streams in 1 MiB chunks."""
     h = hashlib.sha256()
@@ -129,6 +142,16 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
             f"regenerated {enc.num_vars}v/{enc.num_clauses}c",
             cnf_digest=enc.digest,
         )
+    # 3b. Argv-injection guard (audit F3). A proof path whose basename begins
+    # with '-' is read by the checker as a flag: drat-trim -S forges a proof
+    # from stdin, -D deletes it. store_proof's digest basenames are immune, but
+    # a direct/operator-wired path is not — reject it before any checker runs.
+    if os.path.basename(sub.proof_path).startswith("-"):
+        return ProofOutcome(
+            ProofStatus.GATE_PROOF_INVALID,
+            "proof path basename may not begin with '-'",
+            cnf_digest=enc.digest,
+        )
     # 4. Size gate.
     try:
         proof_bytes = os.stat(sub.proof_path).st_size
@@ -161,6 +184,13 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
         with open(cnf_path, "wb") as fh:
             fh.write(enc.dimacs)
 
+        # Record tier needs two independent VERIFIED verdicts, and one of them
+        # MUST come from the formally-verified checker (cake_lpr). lrat-check is
+        # never substituted for that slot (audit F2) — it is not formally
+        # verified and (audit F1) is vacuously forgeable (`N 0 0` -> `c
+        # VERIFIED` on any formula), so a record must never rest on it. If
+        # cake_lpr is absent, a missing-checker result forces CHECKER_UNAVAILABLE
+        # below rather than silently downgrading the trust boundary.
         results = []
         if fmt in (ProofFormat.DRAT_TEXT, ProofFormat.DRAT_BINARY):
             lrat_out = os.path.join(td, "converted.lrat")
@@ -168,24 +198,41 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
                               timeout=timeout)
             results.append(r1)
             if tier is Tier.RECORD and r1.status is ck.CheckStatus.VERIFIED:
-                r2 = ck.cake_lpr(cnf_path, lrat_out, timeout=timeout)
-                if r2.status is ck.CheckStatus.CHECKER_MISSING:
-                    r2 = ck.lrat_check(cnf_path, lrat_out, timeout=timeout)
-                results.append(r2)
-        else:  # LRAT_TEXT
+                # Formally-verified slot: cake_lpr only, over the LRAT drat-trim
+                # emitted. No lrat-check fallback.
+                results.append(ck.cake_lpr(cnf_path, lrat_out, timeout=timeout))
+        elif tier is Tier.RECORD:  # LRAT_TEXT, record tier
+            # cake_lpr is the formally-verified primary; lrat-check backs it as
+            # the second independent verdict only after cake_lpr VERIFIED.
+            r_fv = ck.cake_lpr(cnf_path, sub.proof_path, timeout=timeout)
+            results.append(r_fv)
+            if r_fv.status is ck.CheckStatus.VERIFIED:
+                results.append(ck.lrat_check(cnf_path, sub.proof_path, timeout=timeout))
+        else:  # LRAT_TEXT, triage tier — any available checker suffices
             r1 = ck.cake_lpr(cnf_path, sub.proof_path, timeout=timeout)
             if r1.status is ck.CheckStatus.CHECKER_MISSING:
                 r1 = ck.lrat_check(cnf_path, sub.proof_path, timeout=timeout)
             results.append(r1)
-            if tier is Tier.RECORD and r1.status is ck.CheckStatus.VERIFIED:
-                r2 = ck.lrat_check(cnf_path, sub.proof_path, timeout=timeout) \
-                    if results[0].checker == "cake_lpr" \
-                    else ck.drat_trim(cnf_path, sub.proof_path, timeout=timeout)
-                results.append(r2)
 
     seconds = sum(r.seconds for r in results)
 
     if any(r.status is ck.CheckStatus.CHECKER_MISSING for r in results):
+        # F5: a formula carrying the empty clause is UNSAT with Python-level
+        # certainty (no SAT reasoning needed), so an honest trivially-UNSAT
+        # record stays recordable even when the formal checker is unavailable —
+        # equivalent to synthesizing the one-line empty-clause LRAT and having
+        # the checker confirm it. This never grants a record the geometry does
+        # not, because the empty clause IS the contradiction.
+        if _has_empty_clause(enc.dimacs):
+            return ProofOutcome(
+                ProofStatus.VERIFIED,
+                "trivial UNSAT: regenerated formula contains the empty clause "
+                "(checker-independent)",
+                cnf_digest=enc.digest, encoder_vars=enc.num_vars,
+                encoder_clauses=enc.num_clauses, cnf_bytes=len(enc.dimacs),
+                proof_bytes=proof_bytes, check_seconds=seconds,
+                checker_results=tuple(results),
+            )
         return ProofOutcome(ProofStatus.CHECKER_UNAVAILABLE,
                             "; ".join(f"{r.checker}: {r.detail}" for r in results),
                             cnf_digest=enc.digest, proof_bytes=proof_bytes,

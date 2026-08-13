@@ -24,6 +24,14 @@ _PLACEMENT_RE = re.compile(
 Placement = tuple[int, Xform]
 
 
+def _is_defect_marker(line: str) -> bool:
+    """True iff the line's first whitespace token is exactly '#DEFECT' (audit
+    V7): the old startswith('#DEFECT') test accepted '#DEFECTXYZ ...' as a
+    defect block, admitting out-of-spec bytes into the record."""
+    toks = line.split()
+    return bool(toks) and toks[0] == "#DEFECT"
+
+
 @dataclass(frozen=True)
 class DefectBlock:
     level: int
@@ -49,9 +57,12 @@ def _int(tok: str, what: str) -> int:
     try:
         v = int(tok)
     except ValueError:
-        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"expected integer for {what}, got {tok!r}")
+        # Truncate the echoed token (audit V6): an attacker-controlled first
+        # token can be up to MAX_LINE_CHARS long and would otherwise flood the
+        # CI log verbatim (and amplify V3's exfil channel).
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"expected integer for {what}, got {tok[:80]!r}")
     if abs(v) > MAX_INT:
-        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"oversized integer for {what}: {tok}")
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"oversized integer for {what}: {tok[:80]}")
     return v
 
 
@@ -73,6 +84,11 @@ class _Lines:
 
     def assert_exhausted(self):
         for i in range(self.pos, len(self.lines)):
+            # Enforce the line-length cap on trailing lines too (audit V8):
+            # next() enforces it, assert_exhausted did not, so an oversized
+            # whitespace-only trailing line was silently accepted.
+            if len(self.lines[i]) > MAX_LINE_CHARS:
+                raise VerifyError(ErrorCode.PARSE_SYNTAX, f"line {i + 1} too long")
             if self.lines[i].strip():
                 raise VerifyError(
                     ErrorCode.PARSE_SYNTAX,
@@ -115,7 +131,7 @@ def _parse_patch(lines: _Lines, what: str, max_placements: int) -> tuple[Placeme
             raise
         # A stray section marker where a placement should be means the declared
         # count disagrees with the actual line count.
-        if line.lstrip().startswith("#DEFECT"):
+        if _is_defect_marker(line):
             raise VerifyError(
                 ErrorCode.PARSE_COUNT_MISMATCH,
                 f"{what} declares {n} placements but only {i} present before #DEFECT",
@@ -138,7 +154,8 @@ def parse_submission(text: str, *, max_placements: int = 20_000) -> Submission:
             ErrorCode.PARSE_SYNTAX, "unclassified ('?') record is not a valid submission"
         )
     if len(head) != 1:
-        raise VerifyError(ErrorCode.PARSE_UNKNOWN_GRID, f"bad grid designator {head!r}")
+        # Truncate (audit V6): head is the untrusted first token of the file.
+        raise VerifyError(ErrorCode.PARSE_UNKNOWN_GRID, f"bad grid designator {head[:80]!r}")
     grid = GRIDS.get(head)
     if grid is None:
         raise VerifyError(ErrorCode.PARSE_UNKNOWN_GRID, f"unknown grid {head!r}")
@@ -199,10 +216,15 @@ def parse_submission(text: str, *, max_placements: int = 20_000) -> Submission:
         save = lines.pos
         try:
             nxt = lines.next("end of file")
-        except VerifyError:
+        except VerifyError as e:
+            # Re-raise a line-length violation instead of swallowing it as
+            # generic trailing garbage (audit V8); only a clean end-of-file
+            # (no non-blank lines left) should fall through to "no defect".
+            if "too long" in e.message:
+                raise
             nxt = None
         if nxt is not None:
-            if nxt.lstrip().startswith("#DEFECT"):
+            if _is_defect_marker(nxt):
                 dtoks = nxt.split()
                 if len(dtoks) != 5:
                     raise VerifyError(

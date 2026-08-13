@@ -15,16 +15,27 @@ walking the outer boundary counterclockwise (interior on the left). Criteria:
 Failing both proves nothing (rotation-only and anisohedral tilers exist);
 callers treat no-match as INCONCLUSIVE, never NON_TILER.
 
-Boundary words longer than MAX_BOUNDARY are not tested (the criteria are
-O(n^3)); such shapes fall through to INCONCLUSIVE. Compact tilers — the
-realistic cheat submissions — have short boundaries.
+Boundary words longer than the per-grid cap are not tested (the criteria are
+O(n^3)). The caps sit above the longest boundary any submittable shape can
+have — a hole-free connected n-cell polyomino has perimeter <= 2n+2 = 402 at
+the 200-cell cap, a polyhex <= 4n+2 = 802 — so layer 1 runs on EVERY legal
+shape. (Audit finding V1: the old flat cap of 160 let a 132-cell
+translation-tiling comb with boundary 178 skip the criteria, evade the
+<= 8-cell tiler table, and score 5.0.)
 """
 
 from __future__ import annotations
 
-from .grids import Grid, SquareGrid
+from .grids import Grid, SquareGrid, TriGrid
 
-MAX_BOUNDARY = 160
+# Above the maxima: 402 (square) / 802 (hex) edges at the 200-cell cap.
+MAX_BOUNDARY_SQUARE = 410
+MAX_BOUNDARY_HEX = 810
+
+
+def max_boundary(n_dirs: int) -> int:
+    """Longest boundary word tested for a grid: 4 directions (square) or 6 (hex)."""
+    return MAX_BOUNDARY_SQUARE if n_dirs == 4 else MAX_BOUNDARY_HEX
 
 _TURN_PREFERENCE = (3, 0, 1)  # right turn, straight, left turn (mod 4 deltas)
 
@@ -118,7 +129,7 @@ def _rotations(w: list[int]):
 def translation_criterion(word: list[int], n_dirs: int = 4) -> bool:
     """Beauquier–Nivat A B C Â B̂ Ĉ factorization over all rotations."""
     n = len(word)
-    if n == 0 or n % 2 != 0 or n > MAX_BOUNDARY:
+    if n == 0 or n % 2 != 0 or n > max_boundary(n_dirs):
         return False
     half = n // 2
     for w in _rotations(word):
@@ -151,7 +162,7 @@ def quarter_turn_criterion(word: list[int]) -> bool:
     (factors may be empty). Constructive: yields an isohedral tiling using
     90° rotations."""
     n = len(word)
-    if n == 0 or n > MAX_BOUNDARY:
+    if n == 0 or n > MAX_BOUNDARY_SQUARE:
         return False
     for w in _rotations(word):
         for i in range(n + 1):
@@ -167,7 +178,7 @@ def conway_criterion(word: list[int], n_dirs: int = 4) -> bool:
     """Conway A B C D E F factorization (D = Â; B, C, E, F palindromes)
     over all rotations."""
     n = len(word)
-    if n == 0 or n > MAX_BOUNDARY:
+    if n == 0 or n > max_boundary(n_dirs):
         return False
 
     def splits_into_two_palindromes(w: list[int]) -> bool:
@@ -281,4 +292,89 @@ def hex_boundary_word(cells, grid) -> list[int]:
             raise BoundaryError(f"no continuation at {cur}")
     if len(word) != total:
         raise BoundaryError("hex outer boundary is not a single cycle")
+    return word
+
+
+# ---------------------------------------------------------------------------
+# Iamond boundary words (audit finding V2). The triangular grid embeds into a
+# vertex lattice V(i, j): Kaplan up-triangle (x, y) is rhombus (x//3, y//3) and
+# down-triangle (x, y) is rhombus ((x-1)//3, (y-1)//3). Each triangle is one of
+# the two triangles of its rhombus; boundary edges are steps between vertices,
+# whose six directions (opposite = +3 mod 6, matching _hat/_comp with
+# n_dirs=6) let the Beauquier–Nivat / Conway criteria run unchanged.
+#
+# Validated before shipping (a wrong TILER rejects a legitimate submission):
+# the full enumeration of all 112 free polyiamonds n<=8 yields ZERO shapes the
+# criteria call TILER that are absent from the exhaustive known-tiler table,
+# every side-k triangle is proven TILER, and no corpus iamond non-tiler is a
+# false TILER. See tests/test_iamond_boundary.py.
+
+# The six vertex-lattice directions; opposite(d) = (d + 3) % 6.
+_TRI_DIRS = ((1, 0), (0, 1), (-1, 1), (-1, 0), (0, -1), (1, -1))
+_TRI_DIR_INDEX = {v: i for i, v in enumerate(_TRI_DIRS)}
+_TRI_TURN_PREFERENCE = (5, 4, 0, 1, 2, 3)  # sharpest right first, as for hexes
+
+
+def _tri_ccw_corners(cell):
+    """The three vertex-lattice corners of a triangle, counterclockwise
+    (interior on the left). Orders precomputed from the lattice embedding."""
+    x, y = cell
+    if x % 3 == 0:  # up triangle
+        i, j = x // 3, y // 3
+        return ((i, j), (i + 1, j), (i, j + 1))
+    i, j = (x - 1) // 3, (y - 1) // 3  # down triangle
+    return ((i + 1, j + 1), (i, j + 1), (i + 1, j))
+
+
+def iamond_boundary_word(cells, grid) -> list[int]:
+    """Trace the outer boundary of a hole-free, edge-connected polyiamond
+    counterclockwise; return the 6-letter direction word."""
+    if not isinstance(grid, TriGrid):
+        raise UnsupportedGrid(getattr(grid, "grid_id", "?"))
+    cellset = frozenset(cells)
+
+    out_edges: dict[tuple[int, int], list[int]] = {}
+    total = 0
+    for c in cellset:
+        corners = _tri_ccw_corners(c)
+        in_neighbors = frozenset(n for n in grid.edge_neighbors(c) if n in cellset)
+        shared_edges = frozenset(
+            frozenset(e) for n in in_neighbors
+            for e in (set(_tri_ccw_corners(c)) & set(_tri_ccw_corners(n)),)
+            if len(e) == 2
+        )
+        for k in range(3):
+            va, vb = corners[k], corners[(k + 1) % 3]
+            if frozenset((va, vb)) in shared_edges:
+                continue  # interior edge shared with an in-set neighbor
+            d = _TRI_DIR_INDEX[(vb[0] - va[0], vb[1] - va[1])]
+            out_edges.setdefault(va, []).append(d)
+            total += 1
+
+    if total == 0:
+        raise BoundaryError("empty polyiamond boundary")
+    start = min(out_edges)
+    d0 = min(out_edges[start])
+    word: list[int] = []
+    cur, d = start, d0
+    remaining = {v: set(ds) for v, ds in out_edges.items()}
+    for _ in range(total):
+        remaining[cur].discard(d)
+        word.append(d)
+        vec = _TRI_DIRS[d]
+        cur = (cur[0] + vec[0], cur[1] + vec[1])
+        if cur == start and not any(remaining.values()):
+            break
+        cands = remaining.get(cur)
+        if not cands:
+            raise BoundaryError(f"iamond walk dead-ends at {cur}")
+        for delta in _TRI_TURN_PREFERENCE:
+            nd = (d + delta) % 6
+            if nd in cands:
+                d = nd
+                break
+        else:
+            raise BoundaryError(f"no continuation at {cur}")
+    if len(word) != total:
+        raise BoundaryError("iamond outer boundary is not a single cycle")
     return word

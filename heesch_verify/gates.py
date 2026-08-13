@@ -46,12 +46,31 @@ class IsohedralGate:
             IsohedralGate._KNOWN = _load_known_tilers()
 
     def check(self, cells) -> Verdict:
+        return self.check_detailed(cells)[0]
+
+    def check_detailed(self, cells) -> tuple[Verdict, str]:
+        """check() plus a machine-readable detail naming WHICH constructive
+        proof fired (TILER) or WHY an INCONCLUSIVE shape escaped evaluation:
+
+          tiler:*                  — constructive proof (table / criterion)
+          unchecked:boundary_*     — word extraction failed / over cap
+          unchecked:unsupported_grid — no criteria for this grid at all
+          evaluated:table_exhaustive — below the iamond census cap (n <= 9);
+                                     table absence is a published-census
+                                     non-tiler proof
+          evaluated:no_factorization — the full layer ran, nothing matched
+
+        Board consumers should treat `unchecked:*` entries as presumptively
+        hollow; honest non-tilers land in `evaluated:*`. (Audit V2: the iamond
+        gate now runs the boundary-word criteria on every polyiamond, so a
+        >=10-cell iamond tiler is caught here instead of scoring by default.)
+        """
         from . import boundary
         from .canonical import canonical_digest
 
         known = IsohedralGate._KNOWN.get(self.grid.grid_id)
         if known and canonical_digest(cells, self.grid, True) in known:
-            return Verdict.TILER
+            return Verdict.TILER, "tiler:table"
 
         gid = self.grid.grid_id
         try:
@@ -59,27 +78,39 @@ class IsohedralGate:
                 word, n_dirs = boundary.boundary_word(cells, self.grid), 4
             elif gid == "H":
                 word, n_dirs = boundary.hex_boundary_word(cells, self.grid), 6
+            elif gid == "I":
+                # Audit V2: the iamond gate is no longer structurally absent —
+                # the boundary-word criteria now run on every polyiamond, so a
+                # >=10-cell iamond tiler is caught constructively, not scored.
+                word, n_dirs = boundary.iamond_boundary_word(cells, self.grid), 6
             else:
-                # Iamond boundary words not implemented; the digest table
-                # covers I through n=9 (gap documented in CONVENTIONS.md).
-                return Verdict.INCONCLUSIVE
+                return Verdict.INCONCLUSIVE, "unchecked:unsupported_grid"
         except (boundary.UnsupportedGrid, boundary.BoundaryError):
-            return Verdict.INCONCLUSIVE
-        if len(word) > boundary.MAX_BOUNDARY:
-            return Verdict.INCONCLUSIVE
+            return Verdict.INCONCLUSIVE, "unchecked:boundary_error"
+        # Belt-and-braces (audit V1): the per-grid caps sit above the longest
+        # boundary any legal (<= 200-cell, hole-free) shape can have, so this
+        # branch is unreachable for every submittable O/H shape. Kept so that
+        # if the cell cap or perimeter bound ever changes, an over-cap word
+        # segregates as unchecked rather than silently scoring.
+        if len(word) > boundary.max_boundary(n_dirs):
+            return Verdict.INCONCLUSIVE, "unchecked:boundary_length"
         if boundary.translation_criterion(word, n_dirs):
-            return Verdict.TILER
+            return Verdict.TILER, "tiler:translation"
         if boundary.conway_criterion(word, n_dirs):
-            return Verdict.TILER
+            return Verdict.TILER, "tiler:conway"
         if n_dirs == 4 and boundary.quarter_turn_criterion(word):
-            return Verdict.TILER
+            return Verdict.TILER, "tiler:quarter_turn"
         # Reflection factorization forms (Langerman–Winslow types 4–7) and
         # the hex 60/120-degree rotation forms are deliberately not
         # implemented yet: a wrong TILER verdict rejects a legitimate
         # submission, so each form ships only after differential validation
         # against heesch-sat classifications. Their absence only weakens the
         # filter, never soundness.
-        return Verdict.INCONCLUSIVE
+        if gid == "I" and len(cells) <= 9:
+            # The criteria ran AND the iamond census table (n <= 9) is
+            # exhaustive, so absence from it additionally proves non-tilerhood.
+            return Verdict.INCONCLUSIVE, "evaluated:table_exhaustive"
+        return Verdict.INCONCLUSIVE, "evaluated:no_factorization"
 
 
 class SatClassifierGate:

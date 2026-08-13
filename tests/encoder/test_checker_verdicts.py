@@ -15,7 +15,9 @@ from heesch_encoder.proofcheck import checkers as ck
 
 
 def _fake_run(stdout):
-    def run(cmd, capture_output, text, timeout):
+    def run(cmd, *args, **kwargs):
+        # Tolerant of _run's kwargs (capture_output, text, timeout, and the
+        # audit F3/F4 additions stdin=DEVNULL, errors="replace").
         return types.SimpleNamespace(stdout=stdout, stderr="", returncode=0)
     return run
 
