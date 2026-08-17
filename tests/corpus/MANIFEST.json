@@ -17,7 +17,7 @@
         "cells": [[0,0],[0,1],[0,2],[1,2],[2,2],[3,1]],
         "proven": "non-tiler with W<=2 (F(S,3) UNSAT) and Hc>=1; Hc in {1,2}, Hh<=2",
         "evidence": "no hole-free 2-corona among 200k enumerated weak 2-configs (capped, not exhausted); classifier budget-capped at reached=1",
-        "conflict": "heesch-sat README example reports '1 with Hc = 2' among 6-hexes; pending arbitration by a current heesch-sat run (CI)"
+        "conflict": "Kaplan's published 06hex_0up.txt lists this shape as Hc = 2, Hh = 2 (heesch_verify/known_nontilers.json carries those values). Our F(S,3) is UNSAT (Hh <= 2, consistent) and F(S,2) is SAT, but neither the exact-cover classifier (25 min) nor 200 000 enumerated F(S,2) models (all with a hole in corona 2) produced a hole-free 2-corona witness as of 2026-08-17. Recorded as open; the harness would accept a submitted 2-corona witness and rejects anything deeper (CENSUS_CONTRADICTION)."
       }
     }
   ]
