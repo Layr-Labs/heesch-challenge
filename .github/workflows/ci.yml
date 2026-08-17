@@ -43,9 +43,16 @@ jobs:
         run: pip install -e ".[test]"
       - name: Build proof checkers
         if: runner.os == 'Linux'
-        run: bash tools/build_checkers.sh
+        run: |
+          bash tools/build_checkers.sh
+          # The record tier needs the formally-verified checker; the proof
+          # e2e tests below run against the real cake_lpr on this runner.
+          test -x tools/bin/cake_lpr
       - name: Tests
         run: python -m pytest tests/ -q
+      - name: Proof path e2e (real checkers) and census regression
+        if: runner.os == 'Linux'
+        run: python -m pytest tests/test_proof_gate.py tests/test_census_gate.py -q -rs
       - name: Harness e2e via the real scripts
         if: runner.os == 'Linux'
         run: |
@@ -53,6 +60,8 @@ jobs:
           # (submissions/* never reach this workflow). Yukon grades real
           # submissions via benchmark.yml.
           bash ./setup.sh
+          test -x tools/bin/cake_lpr
           bash ./benchmark.sh
           test -f score.json
           jq -er '.score | select(type == "number")' score.json
+          jq -er '.metrics.non_tiler_evidence | select(. == "census")' score.json

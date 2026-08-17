@@ -84,7 +84,14 @@ jobs:
           } | tee benchmark-results/runner.txt
 
       - name: Setup
-        run: ./setup.sh
+        run: |
+          ./setup.sh
+          # setup.sh builds the proof checkers; the record tier is unreachable
+          # without the formally-verified one, so fail the job loudly here
+          # rather than rejecting every proof-carrying submission as
+          # CHECKER_UNAVAILABLE.
+          test -x tools/bin/drat-trim && test -x tools/bin/lrat-check && test -x tools/bin/cake_lpr
+          ls -la tools/bin | tee -a benchmark-results/runner.txt
 
       - name: Benchmark
         run: ./benchmark.sh
@@ -97,7 +104,9 @@ jobs:
 
           score=$(jq -er '.score | select(type == "number")' score.json)
           hc=$(jq -er '.metrics.hc_verified | select(type == "number")' score.json)
-          echo "score=$score (hc_verified=$hc)" | tee -a benchmark-results/runner.txt
+          evidence=$(jq -er '.metrics.non_tiler_evidence | select(. == "census" or . == "proof")' score.json)
+          exact=$(jq -er '.metrics.exact' score.json)
+          echo "score=$score (hc_verified=$hc, non_tiler_evidence=$evidence, exact=$exact)" | tee -a benchmark-results/runner.txt
           echo "value=$score" >> "$GITHUB_OUTPUT"
 
       - name: Upload score

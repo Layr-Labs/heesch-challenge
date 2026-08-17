@@ -3,7 +3,6 @@
 # bytes.
 third_party/** -text
 tests/encoder/golden/** -text
-tests/encoder/proofs/** -text
 tests/corpus/** -text
 heesch_encoder/epoch/*.json -text
-submission/best.heesch -text
+submission/** -text
