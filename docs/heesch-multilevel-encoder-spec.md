@@ -173,12 +173,18 @@ rectangle 1.45 M vars at `m = 3`, 6.7 M at `m = 5`; a 100-cell square DNF at
 epoch-2 `feasibility_band.supported`: `(<= 20 cells, m <= 5)`,
 `(<= 50, m <= 4)`, `(<= 100, m <= 3)`, `(<= 200, m <= 2)`.
 `check_proof_v2` answers `RESOURCE_EXCEEDED` **before encoding** outside it
-(`multilevel.api.in_feasibility_band`). The harness applies the stricter
-in-harness band `((12, 4), (20, 3), (50, 2))` because it must also encode
-inside the benchmark job (architecture §13.3). All known `Hc = 4` shapes are
-11–20 cells (Kaplan 2022: hexes of 11/13/15/15/16 cells, one 20-iamond), so
-their exactness proofs `F(S, 5)` are inside the epoch band; a hypothetical
-`Hc = 5` at ≤ 20 cells needs `F(S, 6)` — the first band-widening question.
+(`multilevel.api.in_feasibility_band`). The harness applies the slightly stricter
+in-harness band `((20, 5), (50, 3), (100, 2))` because it must also encode
+inside the benchmark job (architecture §13.3): measured `F(S, 5)` encodings
+of the known `Hc = 4` shapes take ~1 min (11-hex, 561 k vars, 6.9 M clauses,
+1.0 GB DIMACS; UNSAT in ~30 s) to ~3 min (20-iamond, 1.27 M vars, 11.0 M
+clauses, 2.1 GB). All known `Hc = 4` shapes are 11–20 cells (Kaplan 2022:
+hexes of 11/13/15/15/16 cells, one 20-iamond), so their exactness proofs are
+inside both bands. **A hypothetical `Hc = 5` needs `F(S, 6)`, which is
+outside the epoch-2 band (max m = 5) — so `record_eligible` is currently
+unreachable by construction.** Widening to m = 6 at ≤ 20 cells is the first
+epoch-3 question (encoding size grows ~5–10× per level; F(S,6) for the
+11-hex would be ~5–10 GB of DIMACS).
 
 ## 11. Frozen constants (epoch 2)
 

@@ -142,7 +142,7 @@ and the proof path **enforced**:
 
 | # | Requirement | Status |
 |---|---|---|
-| 1 | Split the boards | Superseded by fail-closed: there is no board that permits tilers. `tier` (`lower_bound` / `record`) records census- vs proof-backed evidence on the single board. |
+| 1 | Split the boards | Superseded by fail-closed: there is no board that permits tilers. `non_tiler_evidence` (`census` / `proof`) and `tier` (`lower_bound` / `exact_proof`) are recorded on the single board. |
 | 2 | Fail closed for record promotion | Done — and for *all* scoring (`GATE_INCONCLUSIVE`). |
 | 3 | Integrate the proof path | Done (Critical 2). |
 | 4 | Publish the missing specifications | Done (High 4). |
@@ -162,10 +162,14 @@ census — heesch-sat's own output — is the calibration anchor.
 
 - External review of the epoch-2 obligations (M1–M9) and a citable proof of
   E7 gate record *announcements*, not scoring (architecture §13.9).
-- Proof feasibility: the enforced band is ≤ 12 cells m ≤ 4, ≤ 20 m ≤ 3,
-  ≤ 50 m ≤ 2 in-harness (epoch-2 band up to 200 cells at m ≤ 2). All known
-  Hc = 4 shapes fit; a hypothetical Hc = 5 at ≤ 20 cells needs `F(S, 6)`,
-  which is the first band-widening question.
+- Proof feasibility: the enforced in-harness band is ≤ 20 cells m ≤ 5,
+  ≤ 50 m ≤ 3, ≤ 100 m ≤ 2 (epoch-2 band adds (50, 4) and (200, 2)). Every
+  known Hc = 4 shape's exactness proof `F(S,5)` fits (measured: 11-hex 60 s
+  encode / 26 s UNSAT; 20-iamond 173 s encode). **A claim of Hc ≥ 5 needs
+  `F(S,6)`, outside the epoch-2 band, so `record_eligible` is unreachable
+  until an epoch-3 band widening** — the benchmark can certify every value
+  achieved so far, not yet the value that would be a new record. Stated
+  plainly in README and the multilevel spec §10.2.
 - Census evidence is a trusted published computation, not a proof
   certificate; replacing it with maintainer-generated checked proofs for the
   small shapes is listed as future work (architecture §15, threat model R1).

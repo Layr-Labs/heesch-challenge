@@ -117,7 +117,7 @@ class Result:
     # `census` = Kaplan 2022 complete census (published exact Hc/Hh);
     # `proof` = machine-checked UNSAT proof of F(S, m).
     non_tiler_evidence: str = ""
-    tier: str = ""                 # "lower_bound" | "record"
+    tier: str = ""                 # "lower_bound" | "exact_proof"
     census_hc: int | None = None
     census_hh: int | None = None
     proof_status: str = ""

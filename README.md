@@ -112,7 +112,8 @@ codes (`PATCH_GAP`, `PATCH_OVERLAP`, `XFORM_NOT_SYMMETRY`,
 search loop; they are API (`docs/heesch-verifier-architecture.md` §8).
 
 `score.json` records how non-tilerhood was proven and what is exact:
-`non_tiler_evidence` (`census` | `proof`), `tier` (`lower_bound` | `record`),
+`non_tiler_evidence` (`census` | `proof`), `tier` (`lower_bound` |
+`exact_proof` — the latter only when a checked proof pins `Hc = Hh = k`),
 `census_hc/census_hh` (Kaplan's published values, census shapes only),
 `proof_m`, `proof_cnf_digest`, `proof_checkers`, `hh_exact`, `exact`
 (`Hc = Hh = k` established), and `record_eligible` (exact, proof-backed,
@@ -128,15 +129,20 @@ search loop; they are API (`docs/heesch-verifier-architecture.md` §8).
   the exact guarantee: every tiler inside the census is rejected
   (`GATE_IS_TILER`, `tiler:census`); outside it, tilers with a recognised
   factorization are rejected as tilers and **all other shapes are rejected
-  unless a checked UNSAT proof is supplied** — and no such proof exists for a
-  tiler.
+  unless a checked UNSAT proof is supplied** — and, under the encoder's
+  soundness obligations (M1/M2/M4, `docs/soundness-note.md`), no such proof
+  exists for a tiler.
 - **The proof does not check.** The harness regenerates `F(S, m)` from the
   shape line, matches the digest and header, verifies the proof file's
   sha256, and requires **two** independent VERIFIED verdicts, one from the
   formally-verified `cake_lpr` (DRAT: `drat-trim` → `cake_lpr`; LRAT:
   `cake_lpr` → `lrat-check`). `m` must be `≥ hh + 1`
   (`PROOF_LEVEL_INCONSISTENT`); the size must be inside the in-harness band
-  (≤ 12 cells `m ≤ 4`, ≤ 20 `m ≤ 3`, ≤ 50 `m ≤ 2`, else `RESOURCE_EXCEEDED`);
+  (≤ 20 cells `m ≤ 5`, ≤ 50 `m ≤ 3`, ≤ 100 `m ≤ 2`, else `RESOURCE_EXCEEDED`
+  — every known Hc = 4 shape's exactness proof `F(S,5)` fits; a claim of
+  `Hc ≥ 5` needs `F(S,6)`, which no encoder epoch supports yet, so
+  `record_eligible` cannot be reached until the band is widened — see
+  `docs/heesch-multilevel-encoder-spec.md` §10.2);
   a proof block that is present but broken rejects even a census shape.
   `m = hh + 1` makes the value exact; larger `m` certifies non-tilerhood
   with the lower bound only.

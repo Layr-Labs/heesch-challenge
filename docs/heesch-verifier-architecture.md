@@ -96,21 +96,26 @@ Decision table (after the witness and defect passes):
 
 ### 2.3 Tiers, exactness and records
 
-- `tier = lower_bound`: accepted on census evidence. `census_hc/census_hh`
-  are recorded; `exact` is true iff the verified values equal the published
-  ones (`hc_verified == census_hc == census_hh == hh_verified`).
-- `tier = record`: accepted on a verified proof of `F(S, m)`. UNSAT of
-  `F(S, m)` proves `Hh <= m - 1` over all patches (multilevel spec §2.2).
-  With the verified witness `hh_verified = m - 1` the value `Hh` is exact
-  (`hh_exact`); if additionally `hc_verified == hh_verified` then
-  `Hc = Hh = k` exactly (`exact`). If `hh = hc + 1` and `hh_exact`, `Hc` is
-  undecided between `k` and `k+1` (`Status.EXACT_UNDECIDED_HOLE_CASE`).
+- Census evidence: `census_hc/census_hh` are recorded; `exact` is true iff
+  the verified values equal the published ones
+  (`hc_verified == census_hc == census_hh == hh_verified`) — exactness that
+  rests on Kaplan's published computation (threat model R1).
+- Proof evidence: a verified proof of `F(S, m)` proves `Hh <= m - 1` over all
+  patches (multilevel spec §2.2). With the verified witness
+  `hh_verified = m - 1` the value `Hh` is exact (`hh_exact`); if additionally
+  `hc_verified == hh_verified` then `Hc = Hh = k` exactly (`exact`). If
+  `hh = hc + 1` and `hh_exact`, `Hc` is undecided between `k` and `k+1`
+  (`Status.EXACT_UNDECIDED_HOLE_CASE`).
+- `tier = exact_proof` iff `exact` was established by a checked proof;
+  every other accepted entry is `tier = lower_bound` (census-backed, or a
+  proof at `m > hh + 1` that certifies non-tilerhood without pinning the
+  value).
 - `record_eligible = exact and non_tiler_evidence == proof and hc_verified >= 5`
   — the machine-checkable precondition for claiming a new class record. A
   record claim additionally requires the human review in §13.9.
 
-The score scalar (§9.2.6) is `hc_verified + fractional defect progress` on
-both tiers; the tier and evidence are metadata for the board, never a
+The score scalar (§9.2.6) is `hc_verified + fractional defect progress` for
+every accepted entry; tier and evidence are metadata for the board, never a
 multiplier.
 
 ## 3. No participant code
@@ -258,12 +263,12 @@ is not a Heesch number and must never be rendered as one; `hc_verified` is.
 plus `score_fraction_num/den` in metrics.
 
 ### 9.3 Non-tiler evidence (§2.2/§2.3)
-`non_tiler_evidence` (`census|proof`), `tier` (`lower_bound|record`),
+`non_tiler_evidence` (`census|proof`), `tier` (`lower_bound|exact_proof`),
 `census_hc`, `census_hh` (null unless a census shape), `proof_status`,
 `proof_m`, `proof_cnf_digest`, `proof_sha256`, `proof_format`,
 `proof_checkers` (sorted names of the checkers that returned VERIFIED),
 `hh_exact`, `exact`, `record_eligible`. `gate_tier ∈ {nontiler_census,
-nontiler_proof_record}`. Timings are never recorded (determinism).
+nontiler_proof}`. Timings are never recorded (determinism).
 
 ## 10. Calibration corpus
 
@@ -332,9 +337,10 @@ by both `tools/prove.py` and the harness — that is the digest contract.
    "corrected").
 2. Checker preflight: `drat-trim`, `lrat-check`, `cake_lpr` all present as
    regular files in the checker directory, else `CHECKER_UNAVAILABLE`.
-3. Bands: in-harness band `HARNESS_PROOF_BAND = ((12,4),(20,3),(50,2))`
+3. Bands: in-harness band `HARNESS_PROOF_BAND = ((20,5),(50,3),(100,2))`
    (cells, max m) and the epoch-2 feasibility band, else `RESOURCE_EXCEEDED`
-   before any encoding.
+   before any encoding; the encoding step is additionally wall-clock guarded
+   (600 s → `RESOURCE_EXCEEDED`).
 4. Proof file: `lstat`/`open(O_NOFOLLOW)`/`fstat` regular-file discipline,
    stored size ≤ 48 MiB, streamed into scratch (`TMPDIR`) under a fixed safe
    name, xz decompressed with `lzma` (memlimit 256 MiB, decompressed cap

@@ -90,8 +90,10 @@ separately by SHA-pinned actions, hash-pinned vendored sources, and
   work budget.
 - **A-2 boundary criteria**: O(n³) on ≤ 410/810-edge words — seconds at
   most on long-boundary shapes.
-- **A-3 encoding**: `F(S, m)` inside the in-harness band only (≤ 12 cells
-  m ≤ 4, ≤ 20 m ≤ 3, ≤ 50 m ≤ 2), measured; larger is rejected before work.
+- **A-3 encoding**: `F(S, m)` inside the in-harness band only (≤ 20 cells
+  m ≤ 5, ≤ 50 m ≤ 3, ≤ 100 m ≤ 2), measured (up to ~3 min / 2 GB DIMACS at
+  the top corner) and additionally wall-clock guarded (600 s →
+  `RESOURCE_EXCEEDED`); larger is rejected before work.
 - **A-4 checkers/disk**: caps + deadline; drat-trim's LRAT emission can reach
   low GB for a 256 MiB DRAT — the runner has the space; a proof designed to
   be slow simply times out (`RESOURCE_EXCEEDED`, no score).
@@ -111,7 +113,8 @@ separately by SHA-pinned actions, hash-pinned vendored sources, and
   fail-closed rule an unrecognised tiler cannot score: it is either in the
   census (rejected as `tiler:census`), or above it and INCONCLUSIVE (rejected
   without a proof) — and no UNSAT proof of `F(S, m)` exists for a tiler
-  (M1/M4: a tiling's coronas are weak configurations). The constructive
+  (M2: a tiling's coronas are weak configurations; M1/M4: they are
+  representable and satisfy `F`). The constructive
   criteria only improve the rejection reason (`GATE_IS_TILER` vs
   `GATE_INCONCLUSIVE`).
 - **R4 — platform materialization**: if the platform ever materializes a

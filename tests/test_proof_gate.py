@@ -66,7 +66,7 @@ def unsat_proof():
     sub = out.submission
     tile = frozenset(canonical_form(sub.cells, sub.grid, True))
     enc = encode_multilevel(tile, sub.grid, out.contact, 3)
-    with pysat.Solver(name="cadical195", bootstrap_with=[list(c) for c in enc.formula.clauses],
+    with pysat.Solver(name="cadical153", bootstrap_with=[list(c) for c in enc.formula.clauses],
                       with_proof=True) as s:
         assert not s.solve()
         drat = ("\n".join(s.get_proof()) + "\n0\n").encode("ascii")
@@ -208,8 +208,8 @@ def test_real_proof_scores_through_the_harness(tmp_path, unsat_proof):
     m = score["metrics"]
     assert score["score"] == 1.0
     assert m["non_tiler_evidence"] == "proof"
-    assert m["tier"] == "record"
-    assert m["gate_tier"] == "nontiler_proof_record"
+    assert m["tier"] == "lower_bound"   # m = hh + 2: non-tiler certified, not exact
+    assert m["gate_tier"] == "nontiler_proof"
     assert m["gate_detail"] == "nontiler:proof:v2:m=3"
     assert m["proof_m"] == 3 and m["proof_status"] == "VERIFIED"
     assert m["proof_cnf_digest"] == enc.digest and m["proof_sha256"] == unsat_proof["sha"]
@@ -268,7 +268,7 @@ def test_census_shape_plus_exact_proof(tmp_path):
     sub = out.submission
     tile = frozenset(canonical_form(sub.cells, sub.grid, True))
     enc = encode_multilevel(tile, sub.grid, out.contact, 2)
-    with pysat.Solver(name="cadical195", bootstrap_with=[list(c) for c in enc.formula.clauses],
+    with pysat.Solver(name="cadical153", bootstrap_with=[list(c) for c in enc.formula.clauses],
                       with_proof=True) as s:
         assert not s.solve()
         drat = ("\n".join(s.get_proof()) + "\n0\n").encode("ascii")
@@ -277,7 +277,7 @@ def test_census_shape_plus_exact_proof(tmp_path):
     proc, score = _run_harness(tmp_path, full, files=[("p.drat", drat)], checker_dir=d)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     m = score["metrics"]
-    assert m["non_tiler_evidence"] == "proof" and m["tier"] == "record"
+    assert m["non_tiler_evidence"] == "proof" and m["tier"] == "exact_proof"
     assert m["gate_detail"] == "nontiler:census+proof:v2:m=2"
     assert (m["census_hc"], m["census_hh"]) == (1, 1)
     assert m["hh_exact"] is True and m["exact"] is True

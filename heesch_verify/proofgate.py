@@ -46,10 +46,18 @@ PROOF_MAX_PAYLOAD_BYTES = 256 * 1024 * 1024
 _XZ_MEMLIMIT = 256 * 1024 * 1024
 _CHUNK = 1024 * 1024
 
-# In-harness proof band (cells, max m): stricter than the epoch-2 band because
-# the harness must ENCODE F(S, m) inside the benchmark job as well as check
-# it. Measured with tools/ml_feasibility.py (docs/ml-feasibility.md).
-HARNESS_PROOF_BAND = ((12, 4), (20, 3), (50, 2))
+# In-harness proof band (cells, max m): the epoch-2 band minus its two
+# heaviest cells ((50, 4) and (200, 2)), because the harness must ENCODE
+# F(S, m) inside the benchmark job as well as check it. (<= 20, 5) admits
+# the exactness proof of every known Hc = 4 shape (11-20 cells): F(S,5)
+# encodes in ~1 min (11-hex, 1.0 GB DIMACS) to ~3 min (20-iamond, 2.1 GB).
+# A record claim hc >= 5 needs F(S,6), outside the epoch-2 band — see
+# docs/heesch-multilevel-encoder-spec.md §10.2. Measured in
+# docs/ml-feasibility.md.
+HARNESS_PROOF_BAND = ((20, 5), (50, 3), (100, 2))
+# Wall-clock guard around the encoding step (the checkers have their own
+# CheckBudget); exceeding it is RESOURCE_EXCEEDED, never a crash.
+ENCODE_TIMEOUT_S = 600
 
 CHECKER_NAMES = ("drat-trim", "lrat-check", "cake_lpr")
 
@@ -85,6 +93,40 @@ class ProofVerdict:
             "hh_exact": self.hh_exact,
             "exact": self.exact,
         }
+
+
+class _EncodeTimeout(Exception):
+    pass
+
+
+class _encode_alarm:
+    """SIGALRM-based wall-clock guard where available (POSIX main thread);
+    a no-op elsewhere. The checkers subtract their own elapsed time via
+    CheckBudget, so this bounds the Python encoding step above all."""
+
+    def __init__(self, seconds: int):
+        self.seconds = seconds
+        self.armed = False
+
+    def __enter__(self):
+        import signal
+        import threading
+
+        if hasattr(signal, "SIGALRM") and threading.current_thread() is threading.main_thread():
+            def handler(signum, frame):
+                raise _EncodeTimeout()
+            self._old = signal.signal(signal.SIGALRM, handler)
+            signal.alarm(self.seconds)
+            self.armed = True
+        return self
+
+    def __exit__(self, *exc):
+        if self.armed:
+            import signal
+
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, self._old)
+        return False
 
 
 class ProofFileError(Exception):
@@ -256,10 +298,17 @@ class ProofCarryingGate:
                 claimed_clauses=block.num_clauses,
             )
             tile = frozenset(canonical_form(sub.cells, sub.grid, True))
-            out = check_proof_v2(
-                psub, tile, sub.grid, outcome.contact, m,
-                tier=Tier.RECORD, bin_dir=self.checker_dir, budget=self.budget,
-            )
+            try:
+                with _encode_alarm(ENCODE_TIMEOUT_S):
+                    out = check_proof_v2(
+                        psub, tile, sub.grid, outcome.contact, m,
+                        tier=Tier.RECORD, bin_dir=self.checker_dir, budget=self.budget,
+                    )
+            except _EncodeTimeout:
+                return ProofVerdict(
+                    ErrorCode.RESOURCE_EXCEEDED,
+                    f"encoding/checking F(S,{m}) exceeded {ENCODE_TIMEOUT_S} s", m=m,
+                )
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
 

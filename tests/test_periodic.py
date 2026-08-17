@@ -71,3 +71,37 @@ def test_deterministic_and_bounded():
     t = time.time()
     assert periodic.find_periodic_tiling(big, GRIDS["O"]) is not None
     assert time.time() - t < 30.0
+
+
+@pytest.mark.parametrize("gid,n,fname", [("O", 9, "09omino_0up.txt"), ("H", 7, "07hex_0up.txt"),
+                                          ("I", 10, "10iamond_0up.txt")])
+def test_constructive_layer_catches_every_tiler_at_audit_sizes(gid, n, fname):
+    """The audit's experiment with the census bypassed: the boundary-word
+    criteria plus the periodic search must catch EVERY tiler at the first
+    size beyond the old tables (89 / 37 / 79 were missed before). Uses
+    Kaplan's list from the census table to know which shapes are tilers;
+    the listed non-tilers are covered by test_census_gate.py (low budget,
+    all sizes) and test_no_periodic_tiling_for_nontilers_at_full_budget."""
+    import importlib.util
+    import json
+
+    spec = importlib.util.spec_from_file_location("polyforms", ROOT / "tools" / "polyforms.py")
+    polyforms = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(polyforms)
+    from heesch_verify.canonical import canonical_digest
+    from heesch_verify.shape import holes_of
+
+    table = json.loads((ROOT / "heesch_verify" / "known_nontilers.json").read_text())[gid]
+    grid = GRIDS[gid]
+    gate = IsohedralGate(grid)
+    missed = []
+    for cells in polyforms.free_polyforms(gid, n):
+        tile = frozenset(cells)
+        if holes_of(tile, grid):
+            continue
+        if canonical_digest(cells, grid, True) in table:
+            continue
+        v = gate.evaluate(tile, use_census=False)
+        if v.verdict is not Verdict.TILER:
+            missed.append(sorted(cells))
+    assert not missed, f"{len(missed)} tilers missed at {gid}{n}: {missed[:3]}"

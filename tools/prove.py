@@ -78,7 +78,11 @@ def main(argv=None) -> int:
     ap.add_argument("--format", choices=("drat", "lrat"), default="drat")
     ap.add_argument("--xz", action="store_true", help="store the proof xz-compressed")
     ap.add_argument("--out", default=None, help="proof file name (basename, next to the shape file)")
-    ap.add_argument("--solver", default="cadical195")
+    ap.add_argument("--solver", default="cadical153",
+                    help="pysat solver name (default cadical153; cadical195's DRAT tracing under "
+                         "python-sat 1.9.dev7 produced proofs drat-trim rejected on some formulas)")
+    ap.add_argument("--no-selfcheck", action="store_true",
+                    help="skip the drat-trim self-check of the DRAT (default: run it when tools/bin/drat-trim exists)")
     ap.add_argument("--check", action="store_true", help="run the harness's ProofCarryingGate afterwards")
     args = ap.parse_args(argv)
 
@@ -127,21 +131,35 @@ def main(argv=None) -> int:
     drat_path = tmpdir / "proof.drat"
     drat_path.write_text("\n".join(proof_lines) + "\n0\n", encoding="ascii")
     payload_path = drat_path
-    if args.format == "lrat":
-        drat_trim = pathlib.Path(os.environ.get("HEESCH_CHECKER_DIR") or (ROOT / "tools" / "bin")) / "drat-trim"
-        if not drat_trim.exists():
+    drat_trim = pathlib.Path(os.environ.get("HEESCH_CHECKER_DIR") or (ROOT / "tools" / "bin")) / "drat-trim"
+    need_trim = args.format == "lrat" or not args.no_selfcheck
+    if need_trim and not drat_trim.exists():
+        if args.format == "lrat":
             print(f"error: {drat_trim} not built (bash tools/build_checkers.sh)", file=sys.stderr)
             return 1
+        print(f"warning: {drat_trim} not built; skipping the DRAT self-check "
+              "(the harness will still verify it)", file=sys.stderr)
+        need_trim = False
+    if need_trim:
+        # Self-check with the same checker the harness runs first: a solver's
+        # DRAT trace is not guaranteed to verify (seen with cadical195 under
+        # python-sat 1.9.dev7), and a rejected proof is a wasted submission.
         cnf_path = tmpdir / "formula.cnf"
         cnf_path.write_bytes(enc.dimacs)
         lrat_path = tmpdir / "proof.lrat"
-        proc = subprocess.run([str(drat_trim), str(cnf_path), str(drat_path), "-L", str(lrat_path)],
-                              capture_output=True, text=True, errors="replace", stdin=subprocess.DEVNULL)
+        cmd = [str(drat_trim), str(cnf_path), str(drat_path)]
+        if args.format == "lrat":
+            cmd += ["-L", str(lrat_path)]
+        proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
+                              stdin=subprocess.DEVNULL)
         if not any(ln.strip() == "s VERIFIED" for ln in proc.stdout.splitlines()):
-            print("error: drat-trim did not verify the DRAT while converting to LRAT:\n" + proc.stdout[-800:],
+            print("error: drat-trim did not verify the DRAT this solver produced; try another "
+                  "--solver (glucose4, cadical153, lingeling, maplechrono):\n" + proc.stdout[-800:],
                   file=sys.stderr)
             return 1
-        payload_path = lrat_path
+        print("  drat-trim self-check: s VERIFIED", flush=True)
+        if args.format == "lrat":
+            payload_path = lrat_path
     payload_sha = sha256_file(payload_path)
     final = dest_dir / name
     if args.xz:

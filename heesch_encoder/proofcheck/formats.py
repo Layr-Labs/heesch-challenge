@@ -43,7 +43,7 @@ def sniff(path: str) -> ProofFormat:
     if not lines:
         return ProofFormat.EMPTY
     # A SAT model ("v 1 -2 ... 0" / "s SATISFIABLE") is not a proof and must
-    # be rejected before any checker runs (§9.5 item 5).
+    # be rejected before any checker runs (encoder spec §8 step 5; tested in the §9.5 negative suite).
     for ln in lines[:20]:
         if ln.startswith("v ") or ln.startswith("s SATISFIABLE"):
             return ProofFormat.SAT_MODEL

@@ -201,9 +201,12 @@ def main() -> None:
         if proof_verdict.code is not None:
             raise Reject(f"{proof_verdict.code.value}: {proof_verdict.detail}")
         evidence = "proof"
-        tier = "record"
         hh_exact = proof_verdict.hh_exact
         exact = proof_verdict.exact
+        # `exact_proof` = Hc = Hh = k established by a checked proof; every
+        # other accepted entry (census-backed, or a proof at m > hh + 1) is a
+        # lower bound with certified non-tilerhood.
+        tier = "exact_proof" if exact else "lower_bound"
         gate_detail = (
             f"nontiler:{'census+' if gate.verdict is Verdict.NON_TILER else ''}"
             f"proof:v2:m={proof_verdict.m}"
@@ -230,7 +233,7 @@ def main() -> None:
 
     result = _with(
         result,
-        gate_tier=f"nontiler_{evidence}" + ("_record" if evidence == "proof" else ""),
+        gate_tier=f"nontiler_{evidence}",
         verified_claim=claim,
         non_tiler_evidence=evidence,
         tier=tier,

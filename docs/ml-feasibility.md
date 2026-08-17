@@ -1,4 +1,4 @@
-# v2 feasibility table (spec §10.2)
+# v2 feasibility table (multilevel spec §10.2)
 
 Counts from universes alone — no clause objects. DNF = row budget (120s) or memory exceeded.
 
@@ -110,9 +110,9 @@ Counts from universes alone — no clause objects. DNF = row budget (120s) or me
 ## In-harness proof band (2026-08-17)
 
 The harness must *encode* `F(S, m)` inside the benchmark job before it can
-check a proof, so `heesch_verify.proofgate.HARNESS_PROOF_BAND` is stricter
-than the epoch-2 band: `(<= 12 cells, m <= 4)`, `(<= 20, m <= 3)`,
-`(<= 50, m <= 2)`. Real `encode_multilevel` timings at the band edges
+check a proof, so `heesch_verify.proofgate.HARNESS_PROOF_BAND` is the
+epoch-2 band minus its two heaviest cells: `(<= 20 cells, m <= 5)`,
+`(<= 50, m <= 3)`, `(<= 100, m <= 2)`. Real `encode_multilevel` timings
 (Apple M-series laptop, single core), which is what the runner spends before
 the checkers even start:
 
@@ -124,6 +124,12 @@ the checkers even start:
 | 5×4 rectangle | 20 | 3 | 185 288 | 661 102 | 3.6 | 77 MB |
 | 25×2 rectangle | 50 | 2 | 1 334 328 | 4 004 234 | 19.3 | 142 MB |
 | 10×5 rectangle | 50 | 2 | 403 646 | 1 228 670 | 5.8 | 40 MB |
+| Kaplan Hc=4 11-hex | 11 | 5 | 561 357 | 6 867 895 | 60 | 0.99 GB |
+| Kaplan Hc=4 20-iamond | 20 | 5 | 1 272 828 | 11 038 715 | 173 | 2.05 GB |
+
+The 11-hex `F(S,5)` is UNSAT in ~30 s (cadical153) and `F(S,4)` SAT in ~8 s
+— the exactness proof of a record-class shape is producible and checkable
+today. `F(S,6)` (needed for any Hc ≥ 5 claim) is outside the epoch-2 band.
 
 Elongated shapes are the worst case (long boundaries → large universes).
 Checker time on the resulting instances is bounded separately
