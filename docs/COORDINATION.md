@@ -1,14 +1,28 @@
 # Eigen / Yukon coordination checklist
 
+## Comparative audit 2026-08-16 — resolution status
+
+See `docs/audits/2026-08-16-comparative-audit-response.md` for the
+item-by-item response. Headline changes: the acceptance rule is now
+**fail-closed** (a shape scores only when proven a non-tiler — by Kaplan's
+complete census for polyominoes ≤ 10 / polyhexes ≤ 8 / polyiamonds ≤ 12, or by
+a checked UNSAT proof of `F(S, m)` carried in a `#PROOF` block); the proof
+tier is enforced code (`ProofCarryingGate`, checkers built by `setup.sh`,
+`tools/prove.py` for participants); the four normative documents cited by the
+code now exist under `docs/`; the soundness note is two versioned theorems.
+The item 1 residual below ("hollow lower bounds") no longer exists.
+
 ## External review 2026-08 — resolution status
 
 1. **[P0] Plane tilers could score** — FIXED: known-tiler tables extended to
    every polyhex ≤ 6 and polyiamond ≤ 9 (census arithmetic vs Kaplan's
    published counts) + hex boundary-word criteria (BN/Conway over the
    6-letter alphabet); monohex reproducer is now a permanent harness test.
-   Residual (documented in README/CONVENTIONS): very large tilers outside
-   both layers can hold true-but-hollow lower bounds until identified;
-   record tier still requires the proof path.
+   Residual at the time: tilers outside both layers could hold
+   true-but-hollow lower bounds — the 2026-08-16 comparative audit showed
+   this began at 9-ominoes / 7-hexes / 10-iamonds, not "very large" shapes;
+   closed on 2026-08-17 by the fail-closed rule (`GATE_INCONCLUSIVE`) and
+   the exact census layer.
 2. **[P2] Stale score survived failed runs** — FIXED: benchmark.sh wipes
    score.json before any fallible work (flock pattern) and the harness
    unlinks it at start; regression test added.
@@ -33,11 +47,15 @@ the verify stage (defense-in-depth; our harness executes no competitor code).
 - The scalar in score.json is `hc_verified + defect progress` and is NOT a
   Heesch number; frontend copy must never render it as one (§9.2.6 of the
   architecture doc). The true integers ship in `metrics`.
-- Record-tier exactness (ProofCarryingGate) is dark pending (a) the encoder
-  round-trip suite passing on hex/iamond calibration data, (b) resolution of
-  the E8 per-patch quantifier gap (docs/soundness-note.md) — the exactness
-  protocol needs a multi-level encoder revision, and (c) external review of
-  the soundness note. The lower-bound board does not wait on any of this.
+- Record-tier exactness (ProofCarryingGate) is LIVE and enforced: (a) the
+  encoder round-trip suites pass on all three grids, (b) the E8 per-patch
+  quantifier gap is resolved by encoder v2 (multilevel `F(S, m)`), which is
+  the only proof formula accepted. Still open, and gating record
+  *announcements* rather than scoring: (c) external review of the M1–M9
+  arguments (docs/soundness-note.md, docs/heesch-multilevel-encoder-spec.md
+  §8) and a citable proof of E7. `benchmark.json maxSubmissionBytes` is
+  64 MiB to carry proof files (48 MiB cap in the harness); confirm the
+  platform ceiling.
 
 ## Questions for Bartosz (architecture §15, unchanged)
 
