@@ -1,4 +1,4 @@
-"""Text format -> Submission (spec §4, §9.2.7). Syntax only.
+"""Text format -> Submission (spec §4, §9.2.7, §13.2). Syntax only.
 
 Accepts heesch-sat's canonical output byte-for-byte (CRLF and repeated spaces
 tolerated); rejects structural garbage with distinct codes, never a crash.
@@ -24,12 +24,32 @@ _PLACEMENT_RE = re.compile(
 Placement = tuple[int, Xform]
 
 
-def _is_defect_marker(line: str) -> bool:
-    """True iff the line's first whitespace token is exactly '#DEFECT' (audit
-    V7): the old startswith('#DEFECT') test accepted '#DEFECTXYZ ...' as a
-    defect block, admitting out-of-spec bytes into the record."""
+def _marker(line: str) -> str | None:
+    """The section marker a line opens, or None. Exact first-token match
+    (audit V7): the old startswith('#DEFECT') test accepted '#DEFECTXYZ ...'
+    as a defect block, admitting out-of-spec bytes into the record."""
     toks = line.split()
-    return bool(toks) and toks[0] == "#DEFECT"
+    if toks and toks[0] in ("#DEFECT", "#PROOF"):
+        return toks[0]
+    return None
+
+
+def _is_defect_marker(line: str) -> bool:
+    return _marker(line) == "#DEFECT"
+
+
+def _is_section_marker(line: str) -> bool:
+    return _marker(line) is not None
+
+
+# §13.2 proof block: the file that carries the proof lives next to
+# best.heesch under submission/ and is named by a plain basename only.
+PROOF_SCHEMA_VERSION = 1
+PROOF_ENCODER_VERSION = "heesch-encoder/v2"
+PROOF_ENCODER_EPOCH = 2
+PROOF_MAX_M = 8
+_HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+_PROOF_BASENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
 @dataclass(frozen=True)
@@ -42,6 +62,31 @@ class DefectBlock:
 
 
 @dataclass(frozen=True)
+class ProofBlock:
+    """`#PROOF` block (§13.2): binds a proof file to this shape.
+
+        #PROOF 1
+        encoder heesch-encoder/v2 2 <m>
+        cnf <cnf_sha256> <num_vars> <num_clauses>
+        file <basename> <drat|lrat> <none|xz> <payload_sha256>
+
+    `payload_sha256` is over the DEcompressed proof bytes (what the checkers
+    read); `cnf_sha256` is the digest of the regenerated DIMACS for F(S, m).
+    """
+
+    m: int
+    encoder_version: str
+    epoch: int
+    cnf_digest: str
+    num_vars: int
+    num_clauses: int
+    file_name: str
+    fmt: str            # "drat" | "lrat"
+    compression: str    # "none" | "xz"
+    payload_sha256: str
+
+
+@dataclass(frozen=True)
 class Submission:
     grid_id: str
     grid: Grid
@@ -51,6 +96,7 @@ class Submission:
     patch_count: int
     patches: tuple[tuple[Placement, ...], ...]
     defect: DefectBlock | None
+    proof: ProofBlock | None = None
 
 
 def _int(tok: str, what: str) -> int:
@@ -131,13 +177,112 @@ def _parse_patch(lines: _Lines, what: str, max_placements: int) -> tuple[Placeme
             raise
         # A stray section marker where a placement should be means the declared
         # count disagrees with the actual line count.
-        if _is_defect_marker(line):
+        if _is_section_marker(line):
             raise VerifyError(
                 ErrorCode.PARSE_COUNT_MISMATCH,
-                f"{what} declares {n} placements but only {i} present before #DEFECT",
+                f"{what} declares {n} placements but only {i} present before {_marker(line)}",
             )
         out.append(_parse_placement(line, what))
     return tuple(out)
+
+
+def _peek_marker(lines: _Lines) -> str | None:
+    """Return the next non-blank line WITHOUT consuming it (or None at a clean
+    end of file). A line-length violation is re-raised rather than swallowed
+    as generic trailing garbage (audit V8)."""
+    if lines.pos >= len(lines.lines):
+        return None
+    save = lines.pos
+    try:
+        nxt = lines.next("end of file")
+    except VerifyError as e:
+        if "too long" in e.message:
+            raise
+        return None
+    lines.pos = save
+    return nxt
+
+
+def _parse_defect_block(header: str, lines: _Lines, max_placements: int) -> DefectBlock:
+    dtoks = header.split()
+    if len(dtoks) != 5:
+        raise VerifyError(
+            ErrorCode.PARSE_SYNTAX, "defect header must be '#DEFECT k u_hc u_hh r'"
+        )
+    d_level = _int(dtoks[1], "defect corona level")
+    d_uhc = _int(dtoks[2], "defect u_hc")
+    d_uhh = _int(dtoks[3], "defect u_hh")
+    d_req = _int(dtoks[4], "defect required")
+    if min(d_level, d_uhc, d_uhh, d_req) < 0:
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, "negative value in defect header")
+    tiles = _parse_patch(lines, "defect block", max_placements)
+    return DefectBlock(level=d_level, u_hc=d_uhc, u_hh=d_uhh, required=d_req, tiles=tiles)
+
+
+def _proof_line(lines: _Lines, keyword: str, arity: int) -> list[str]:
+    line = lines.next(f"proof block '{keyword}' line")
+    toks = line.split()
+    if len(toks) != arity or toks[0] != keyword:
+        raise VerifyError(
+            ErrorCode.PARSE_SYNTAX,
+            f"proof block: expected '{keyword}' line with {arity - 1} fields, got {line[:80]!r}",
+        )
+    return toks
+
+
+def _parse_proof_block(header: str, lines: _Lines) -> ProofBlock:
+    htoks = header.split()
+    if len(htoks) != 2:
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof header must be '#PROOF 1'")
+    if _int(htoks[1], "proof schema version") != PROOF_SCHEMA_VERSION:
+        raise VerifyError(
+            ErrorCode.PARSE_SYNTAX, f"unsupported proof block schema {htoks[1][:20]!r}"
+        )
+    enc = _proof_line(lines, "encoder", 4)
+    if enc[1] != PROOF_ENCODER_VERSION:
+        raise VerifyError(
+            ErrorCode.PARSE_SYNTAX, f"proof block: unsupported encoder {enc[1][:40]!r}"
+        )
+    if _int(enc[2], "proof encoder epoch") != PROOF_ENCODER_EPOCH:
+        raise VerifyError(
+            ErrorCode.PARSE_SYNTAX, f"proof block: unsupported encoder epoch {enc[2][:20]!r}"
+        )
+    m = _int(enc[3], "proof level m")
+    if not 1 <= m <= PROOF_MAX_M:
+        raise VerifyError(
+            ErrorCode.PARSE_SYNTAX, f"proof block: m must be in 1..{PROOF_MAX_M}, got {m}"
+        )
+    cnf = _proof_line(lines, "cnf", 4)
+    if not _HEX64_RE.match(cnf[1]):
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: cnf digest must be 64 lowercase hex")
+    num_vars = _int(cnf[2], "proof num_vars")
+    num_clauses = _int(cnf[3], "proof num_clauses")
+    if num_vars < 1 or num_clauses < 1:
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: num_vars/num_clauses must be >= 1")
+    fl = _proof_line(lines, "file", 5)
+    name, fmt, comp, payload = fl[1], fl[2], fl[3], fl[4]
+    if not _PROOF_BASENAME_RE.match(name) or name == "best.heesch":
+        raise VerifyError(
+            ErrorCode.PARSE_SYNTAX, f"proof block: illegal proof file name {name[:80]!r}"
+        )
+    if fmt not in ("drat", "lrat"):
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"proof block: format must be drat|lrat, got {fmt[:20]!r}")
+    if comp not in ("none", "xz"):
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"proof block: compression must be none|xz, got {comp[:20]!r}")
+    expected_suffix = "." + fmt + (".xz" if comp == "xz" else "")
+    if not name.endswith(expected_suffix):
+        raise VerifyError(
+            ErrorCode.PARSE_SYNTAX,
+            f"proof block: file name must end in {expected_suffix!r} for format {fmt}/{comp}",
+        )
+    if not _HEX64_RE.match(payload):
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: payload digest must be 64 lowercase hex")
+    return ProofBlock(
+        m=m, encoder_version=enc[1], epoch=PROOF_ENCODER_EPOCH, cnf_digest=cnf[1],
+        num_vars=num_vars, num_clauses=num_clauses, file_name=name, fmt=fmt,
+        compression=comp, payload_sha256=payload,
+    )
+
 
 
 def parse_submission(text: str, *, max_placements: int = 20_000) -> Submission:
@@ -209,39 +354,25 @@ def parse_submission(text: str, *, max_placements: int = 20_000) -> Submission:
         _parse_patch(lines, f"patch {i + 1}", max_placements) for i in range(pcount)
     )
 
-    # --- optional defect block (§9.2.7) ---
+    # --- optional blocks: #DEFECT (§9.2.7) then #PROOF (§13.2), in that order ---
     defect = None
-    if lines.pos < len(lines.lines):
-        # Peek for a #DEFECT marker among remaining non-blank lines.
-        save = lines.pos
-        try:
-            nxt = lines.next("end of file")
-        except VerifyError as e:
-            # Re-raise a line-length violation instead of swallowing it as
-            # generic trailing garbage (audit V8); only a clean end-of-file
-            # (no non-blank lines left) should fall through to "no defect".
-            if "too long" in e.message:
-                raise
-            nxt = None
-        if nxt is not None:
-            if _is_defect_marker(nxt):
-                dtoks = nxt.split()
-                if len(dtoks) != 5:
-                    raise VerifyError(
-                        ErrorCode.PARSE_SYNTAX, "defect header must be '#DEFECT k u_hc u_hh r'"
-                    )
-                d_level = _int(dtoks[1], "defect corona level")
-                d_uhc = _int(dtoks[2], "defect u_hc")
-                d_uhh = _int(dtoks[3], "defect u_hh")
-                d_req = _int(dtoks[4], "defect required")
-                if min(d_level, d_uhc, d_uhh, d_req) < 0:
-                    raise VerifyError(ErrorCode.PARSE_SYNTAX, "negative value in defect header")
-                tiles = _parse_patch(lines, "defect block", max_placements)
-                defect = DefectBlock(
-                    level=d_level, u_hc=d_uhc, u_hh=d_uhh, required=d_req, tiles=tiles
-                )
-            else:
-                lines.pos = save
+    proof = None
+    nxt = _peek_marker(lines)
+    if nxt is not None and _marker(nxt) == "#DEFECT":
+        lines.next("defect header")
+        defect = _parse_defect_block(nxt, lines, max_placements)
+        nxt = _peek_marker(lines)
+    if nxt is not None and _marker(nxt) == "#PROOF":
+        lines.next("proof header")
+        proof = _parse_proof_block(nxt, lines)
+        nxt = _peek_marker(lines)
+    if nxt is not None and _marker(nxt) == "#DEFECT":
+        raise VerifyError(
+            ErrorCode.PARSE_SYNTAX,
+            "#DEFECT must precede #PROOF" if proof is not None else "duplicate #DEFECT block",
+        )
+    if nxt is not None and _marker(nxt) == "#PROOF":
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, "duplicate #PROOF block")
     lines.assert_exhausted()
 
     return Submission(
@@ -253,4 +384,5 @@ def parse_submission(text: str, *, max_placements: int = 20_000) -> Submission:
         patch_count=pcount,
         patches=patches,
         defect=defect,
+        proof=proof,
     )

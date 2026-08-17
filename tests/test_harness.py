@@ -44,7 +44,8 @@ def test_baseline_scores(tmp_path):
     assert score["score"] == 1.0
     m = score["metrics"]
     assert m["hc_verified"] == 1 and m["hh_verified"] == 1
-    assert m["gate_tier"] == "isohedral_inconclusive"
+    assert m["gate_tier"] == "nontiler_census"
+    assert m["non_tiler_evidence"] == "census"
     assert "defect_achieved" not in m["verified_claim"] or "minimum" not in m["verified_claim"]
 
 

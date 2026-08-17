@@ -18,7 +18,13 @@ def main(argv=None) -> int:
     ap.add_argument(
         "--emit-epoch",
         metavar="OUT",
-        help="after successful verification, write an Epoch-compatible copy (defect block stripped)",
+        help="after successful verification, write an Epoch-compatible copy (defect and proof blocks stripped)",
+    )
+    ap.add_argument(
+        "--check-proof",
+        action="store_true",
+        help="also run the #PROOF block through the same ProofCarryingGate the harness uses "
+             "(checkers from $HEESCH_CHECKER_DIR or ./tools/bin); exit 0 only if VERIFIED",
     )
     args = ap.parse_args(argv)
 
@@ -43,13 +49,15 @@ def main(argv=None) -> int:
         return 1
 
     if args.emit_epoch:
-        # Strip the optional defect block (§9.2.7): everything from the
-        # #DEFECT marker line onward. Only a verified witness is exported —
-        # an invalid submission must not leave an "Epoch-compatible" file.
+        # Strip the optional blocks (§9.2.7 defect, §13.2 proof): everything
+        # from the first #DEFECT / #PROOF marker line onward (the proof block
+        # always follows the defect block, so breaking on either strips both).
+        # Only a verified witness is exported — an invalid submission must not
+        # leave an "Epoch-compatible" file.
         out_lines = []
         for line in text.split("\n"):
             toks = line.split()
-            if toks and toks[0] == "#DEFECT":  # exact marker token (audit V7)
+            if toks and toks[0] in ("#DEFECT", "#PROOF"):  # exact marker token (audit V7)
                 break
             out_lines.append(line)
         body = "\n".join(out_lines).rstrip("\n") + "\n"
@@ -59,6 +67,26 @@ def main(argv=None) -> int:
         except (OSError, UnicodeEncodeError) as e:
             print(json.dumps({"error": "IO", "message": f"emit-epoch: {e}"}))
             return 1
+
+    if args.check_proof:
+        import os
+        import pathlib
+
+        from .proofgate import ProofCarryingGate
+
+        sub = outcome.submission
+        if sub.proof is None:
+            print(json.dumps({"error": "PROOF_FILE_INVALID", "message": "no #PROOF block"}))
+            return 1
+        shape_path = pathlib.Path(args.file).resolve()
+        checker_dir = pathlib.Path(
+            os.environ.get("HEESCH_CHECKER_DIR") or (pathlib.Path.cwd() / "tools" / "bin")
+        )
+        verdict = ProofCarryingGate(shape_path.parent, checker_dir).check(sub, outcome)
+        out = outcome.result.to_json()
+        out["proof"] = verdict.to_json()
+        print(json.dumps(out, sort_keys=True, separators=(",", ":")))
+        return 0 if verdict.code is None else 1
 
     print(outcome.result.to_json_str())
     return 0

@@ -19,11 +19,12 @@ from heesch_verify.canonical import canonical_digest
 from heesch_verify.gates import IsohedralGate, Verdict
 
 GRID = GRIDS["I"]
-_TABLE = set().union(*[
-    set(v) for k, v in
-    json.loads((ROOT / "heesch_verify" / "known_tilers.json").read_text()).items()
-    if k == "I"
-])
+# Kaplan's complete census: every polyiamond n <= 12 that is NOT in this
+# table (and is hole-free) is a tiler, so a criterion verdict of TILER on a
+# listed shape would be a false TILER.
+_NONTILERS = set(
+    json.loads((ROOT / "heesch_verify" / "known_nontilers.json").read_text())["I"]
+)
 
 
 def _side_triangle(side):
@@ -37,7 +38,9 @@ def _side_triangle(side):
 
 
 def _verdict(cells):
-    return IsohedralGate(GRID).check_detailed(cells)
+    # Criteria only: the census layer would decide every n <= 12 iamond by
+    # lookup, which is not what these tests validate.
+    return IsohedralGate(GRID).evaluate(cells, use_census=False)
 
 
 def test_side4_triangle_is_tiler():
@@ -78,8 +81,8 @@ def test_no_false_tiler_over_full_enumeration():
     for dg, s in shapes.items():
         verdict, _ = _verdict(s)
         if verdict is Verdict.TILER:
-            assert dg in _TABLE, (
-                f"FALSE TILER on an n={len(s)} iamond absent from the census table"
+            assert dg not in _NONTILERS, (
+                f"FALSE TILER on an n={len(s)} iamond listed as a census non-tiler"
             )
 
 

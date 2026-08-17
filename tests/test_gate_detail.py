@@ -1,9 +1,8 @@
-"""V2 regression (2026-08 audit, docs/VULN-REVIEW.md): for the iamond grid
-the gate returned INCONCLUSIVE unconditionally beyond the n <= 9 table, so
-every tiler with >= 10 cells scored by default — and its score.json was
-indistinguishable from an honest non-tiler's. `check_detailed` now says WHY
-a shape was inconclusive, and the harness emits `gate_detail` in metrics:
-`unchecked:*` entries never saw the gate and are presumptively hollow.
+"""Gate detail contract (2026-08 audits). `evaluate` says WHICH proof fired
+(census / factorization) or WHY a shape escaped evaluation, and the harness
+emits `gate_detail` in metrics. Under the fail-closed rule (architecture
+§2.2) an INCONCLUSIVE shape without a proof is rejected, so `gate_detail` on
+a scored entry is always `nontiler:*`.
 """
 
 import json
@@ -35,11 +34,11 @@ def _cells_from_corpus(name: str) -> frozenset:
     return frozenset(zip(map(int, toks[0::2]), map(int, toks[1::2])))
 
 
-def test_table_hit_names_the_proof():
-    assert IsohedralGate(GRIDS["O"]).check_detailed(frozenset({(0, 0)})) == (
-        Verdict.TILER,
-        "tiler:table",
-    )
+def test_census_tiler_names_the_proof():
+    v = IsohedralGate(GRIDS["O"]).check_detailed(frozenset({(0, 0)}))
+    assert (v.verdict, v.detail) == (Verdict.TILER, "tiler:census")
+    verdict, detail = v  # tuple-unpack compatibility
+    assert (verdict, detail) == (Verdict.TILER, "tiler:census")
 
 
 def test_iamond_beyond_table_tiler_is_now_caught():
@@ -51,12 +50,25 @@ def test_iamond_beyond_table_tiler_is_now_caught():
     assert detail in ("tiler:conway", "tiler:translation")
 
 
-def test_iamond_within_table_cap_is_exhaustively_evaluated():
-    # An n <= 9 iamond absent from the table is a census-proven non-tiler.
+def test_census_nontiler_carries_published_values():
+    # An n <= 12 iamond listed in Kaplan's census is a proven non-tiler and
+    # the gate reports the published exact Hc/Hh alongside.
     cells = _cells_from_corpus("iamond9-nontiler-0-hc0hh0")
-    verdict, detail = IsohedralGate(GRIDS["I"]).check_detailed(cells)
-    assert verdict is Verdict.INCONCLUSIVE
-    assert detail == "evaluated:table_exhaustive"
+    v = IsohedralGate(GRIDS["I"]).check_detailed(cells)
+    assert v.verdict is Verdict.NON_TILER
+    assert v.detail == "nontiler:census"
+    assert (v.census_hc, v.census_hh) == (0, 0)
+
+
+def test_beyond_census_criteria_miss_is_inconclusive():
+    # An 11-omino from Kaplan's 11omino_2up list (Hc=1, Hh=2): a non-tiler
+    # above the census bound. No factorization exists, so the gate is
+    # honestly INCONCLUSIVE and the harness will demand a #PROOF block.
+    cells = frozenset([(2, 0), (4, 0), (0, 1), (1, 1), (2, 1), (3, 1), (4, 1),
+                       (2, 2), (3, 2), (4, 2), (5, 2)])
+    v = IsohedralGate(GRIDS["O"]).check_detailed(cells)
+    assert v.verdict is Verdict.INCONCLUSIVE
+    assert v.detail == "evaluated:no_factorization"
 
 
 def test_boundary_error_is_flagged_unchecked():
@@ -65,11 +77,16 @@ def test_boundary_error_is_flagged_unchecked():
     assert detail == "unchecked:boundary_error"
 
 
-def test_honest_nontiler_is_evaluated():
+def test_honest_small_nontiler_is_census_decided():
     cells = _cells_from_corpus("omino7-nontiler-0-hc1hh1")
-    verdict, detail = IsohedralGate(GRIDS["O"]).check_detailed(cells)
-    assert verdict is Verdict.INCONCLUSIVE
-    assert detail == "evaluated:no_factorization"
+    v = IsohedralGate(GRIDS["O"]).check_detailed(cells)
+    assert v.verdict is Verdict.NON_TILER
+    assert v.detail == "nontiler:census"
+    assert (v.census_hc, v.census_hh) == (1, 1)
+    # Criteria alone (census switched off) prove nothing about it.
+    c = IsohedralGate(GRIDS["O"]).evaluate(cells, use_census=False)
+    assert c.verdict is Verdict.INCONCLUSIVE
+    assert c.detail == "evaluated:no_factorization"
 
 
 def test_check_remains_verdict_only():
@@ -93,5 +110,9 @@ def test_gate_detail_reaches_score_json(tmp_path):
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     metrics = json.loads((repo / "score.json").read_text())["metrics"]
-    assert metrics["gate_tier"] == "isohedral_inconclusive"  # unchanged contract
-    assert metrics["gate_detail"] == "evaluated:no_factorization"
+    assert metrics["gate_tier"] == "nontiler_census"
+    assert metrics["gate_detail"] == "nontiler:census"
+    assert metrics["non_tiler_evidence"] == "census"
+    assert metrics["tier"] == "lower_bound"
+    assert (metrics["census_hc"], metrics["census_hh"]) == (1, 1)
+    assert metrics["exact"] is True and metrics["record_eligible"] is False

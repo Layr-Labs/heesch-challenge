@@ -31,4 +31,4 @@ packages = [
 
 [tool.setuptools.package-data]
 heesch_encoder = ["epoch/*.json"]
-heesch_verify = ["known_tilers.json"]
+heesch_verify = ["known_nontilers.json"]

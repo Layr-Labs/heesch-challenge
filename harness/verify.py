@@ -7,8 +7,14 @@ code, not the hash-seed pin).
 
 Policy (mirrors the verifier architecture §3): the solver's search program
 under submission/ is an inert artifact — nothing there is ever imported or
-executed. The only input is the plain-text shape file, and the verifier
-re-derives every claim from scratch.
+executed. The inputs are the plain-text shape file and, optionally, a proof
+file it names — pure data, parsed by our own verifier and by the vendored
+proof checkers inside the same sandbox.
+
+Acceptance rule (architecture §2.2, fail closed): a submission scores only
+when the witness verifies AND the shape's non-tilerhood is proven — by the
+published census (small shapes) or by a machine-checked UNSAT proof of
+F(S, m) carried in a #PROOF block. Everything else is REJECTED.
 
 score.json is written only on full success; every rejection exits nonzero
 with a REJECTED line naming the stable error code, and never writes a score.
@@ -24,6 +30,7 @@ import sys
 
 from heesch_verify import VerifyError, defect as defect_mod, score as score_mod
 from heesch_verify.gates import IsohedralGate, Verdict
+from heesch_verify.proofgate import ProofCarryingGate
 from heesch_verify.result import Result
 from heesch_verify.witness import VerifyConfig, verify_witness
 
@@ -71,29 +78,34 @@ def _strict_load_text(path: pathlib.Path, max_bytes: int) -> str:
         raise Reject(f"{path.name} is not valid utf-8: {e}")
 
 
-def _score_payload(result: Result, defect_res, gate: Verdict, gate_detail: str) -> dict:
+def _score_payload(result: Result, defect_res) -> dict:
     score = score_mod.yukon_score(result)
     if not math.isfinite(score):
         raise Reject("computed score is not finite")
     metrics = result.to_json()
-    metrics["gate_tier"] = f"isohedral_{gate.value.lower()}"
-    # Board-visible hollow-entry marker (audit V2): "unchecked:*" means the
-    # gate never evaluated this shape class — segregate these entries.
-    metrics["gate_detail"] = gate_detail
     if defect_res is not None:
         frac_num = max(0, defect_res.required - defect_res.defect_hc)
         metrics["score_fraction_num"] = frac_num
         metrics["score_fraction_den"] = defect_res.required
-    # §9.2.2 / §9.2.6: what was established, never "minimum defect", and the
-    # scalar is never labelled a Heesch number.
-    claim = result.verified_claim
-    if defect_res is not None:
-        claim += (
-            f"; defect_achieved {defect_res.defect_hc}/{defect_res.required}"
-            f" at corona {defect_res.corona_level}"
-        )
-    metrics["verified_claim"] = claim
     return {"score": round(score, 6), "metrics": metrics}
+
+
+def _with(result: Result, **fields) -> Result:
+    kwargs = {**result.__dict__}
+    kwargs.update(fields)
+    return Result(**kwargs)
+
+
+def _run_proof_gate(sub, outcome):
+    # Checker binaries: the harness may be running from the installed copy in
+    # .venv-bench (python -I), so the package-relative default in
+    # heesch_encoder.proofcheck.checkers does not resolve — locate them
+    # explicitly (HEESCH_CHECKER_DIR, else <repo>/tools/bin). Budget: fits the
+    # 30-minute benchmark job with the witness/encoding stages.
+    from heesch_encoder.proofcheck.checkers import CheckBudget
+
+    checker_dir = pathlib.Path(os.environ.get("HEESCH_CHECKER_DIR") or (ROOT / "tools" / "bin"))
+    return ProofCarryingGate(ROOT, checker_dir, CheckBudget()).check(sub, outcome)
 
 
 def main() -> None:
@@ -140,16 +152,94 @@ def main() -> None:
         )
         result = Result(**kwargs)
 
-    # Stage 6 — non-tiler gate 1 (cheap filter). A constructive isohedral
-    # factorization means infinite Heesch number: reject.
-    gate, gate_detail = IsohedralGate(sub.grid).check_detailed(frozenset(sub.cells))
-    if gate is Verdict.TILER:
+    # §9.2.2 / §9.2.6: what was established, never "minimum defect", and the
+    # scalar is never labelled a Heesch number.
+    claim = result.verified_claim
+    if defect_res is not None:
+        claim += (
+            f"; defect_achieved {defect_res.defect_hc}/{defect_res.required}"
+            f" at corona {defect_res.corona_level}"
+        )
+
+    # Stage 6 — the fail-closed non-tiler rule (architecture §2.2). A shape
+    # scores only when its non-tilerhood is PROVEN: by Kaplan's complete
+    # census (exact for small shapes) or by a machine-checked UNSAT proof of
+    # F(S, m) carried in the submission. A constructive TILER verdict rejects
+    # outright; INCONCLUSIVE without a proof rejects too.
+    gate = IsohedralGate(sub.grid).evaluate(frozenset(sub.cells))
+    if gate.verdict is Verdict.TILER:
         raise Reject(
-            "GATE_IS_TILER: shape tiles the plane isohedrally; "
+            f"GATE_IS_TILER: shape tiles the plane ({gate.detail}); "
             "its Heesch number is not finite"
         )
 
-    payload = _score_payload(result, defect_res, gate, gate_detail)
+    evidence = ""
+    tier = "lower_bound"
+    exact = False
+    hh_exact = False
+    gate_detail = gate.detail
+    if gate.verdict is Verdict.NON_TILER:
+        # Soundness tripwire: a verified witness deeper than the census's
+        # exact value means the verifier or the census is wrong. Never score.
+        if result.hc_verified > gate.census_hc or result.hh_verified > gate.census_hh:
+            raise Reject(
+                "CENSUS_CONTRADICTION: verified hc/hh "
+                f"{result.hc_verified}/{result.hh_verified} exceed the published "
+                f"census values {gate.census_hc}/{gate.census_hh}"
+            )
+        evidence = "census"
+        hh_exact = result.hh_verified == gate.census_hh
+        exact = hh_exact and result.hc_verified == gate.census_hc == gate.census_hh
+        claim += f"; non-tiler by census (Kaplan 2022: Hc={gate.census_hc}, Hh={gate.census_hh})"
+        result = _with(result, census_hc=gate.census_hc, census_hh=gate.census_hh)
+
+    proof_verdict = None
+    if sub.proof is not None:
+        proof_verdict = _run_proof_gate(sub, outcome)
+        # Any block that is present is verified or the submission is rejected
+        # (same rule as #DEFECT); a failed proof is never silently ignored.
+        if proof_verdict.code is not None:
+            raise Reject(f"{proof_verdict.code.value}: {proof_verdict.detail}")
+        evidence = "proof"
+        tier = "record"
+        hh_exact = proof_verdict.hh_exact
+        exact = proof_verdict.exact
+        gate_detail = (
+            f"nontiler:{'census+' if gate.verdict is Verdict.NON_TILER else ''}"
+            f"proof:v2:m={proof_verdict.m}"
+        )
+        claim += f"; non-tiler by checked UNSAT proof of F(S,{proof_verdict.m})"
+        if exact:
+            claim += f"; Hc = Hh = {result.hc_verified} exactly"
+        result = _with(
+            result,
+            proof_status="VERIFIED",
+            proof_m=proof_verdict.m,
+            proof_cnf_digest=proof_verdict.cnf_digest,
+            proof_sha256=proof_verdict.proof_sha256,
+            proof_format=proof_verdict.fmt,
+            proof_checkers=tuple(proof_verdict.checkers_verified),
+        )
+
+    if not evidence:
+        raise Reject(
+            "GATE_INCONCLUSIVE: non-tilerhood not established — the shape is "
+            "outside the published census and the submission carries no #PROOF "
+            "block (see README: fail-closed rule)"
+        )
+
+    result = _with(
+        result,
+        gate_tier=f"nontiler_{evidence}" + ("_record" if evidence == "proof" else ""),
+        verified_claim=claim,
+        non_tiler_evidence=evidence,
+        tier=tier,
+        hh_exact=hh_exact,
+        exact=exact,
+        record_eligible=bool(exact and evidence == "proof" and result.hc_verified >= 5),
+    )
+    payload = _score_payload(result, defect_res)
+    payload["metrics"]["gate_detail"] = gate_detail
     SCORE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(SCORE_PATH, "w", encoding="ascii", newline="\n") as fh:
         json.dump(payload, fh, sort_keys=True)

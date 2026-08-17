@@ -48,3 +48,23 @@ def regenerate_and_match_v2(claimed_digest: str, tile_cells, grid: Grid,
     if enc.digest != claimed_digest:
         return DigestMismatch(expected=claimed_digest, computed=enc.digest)
     return enc
+
+
+def feasibility_band() -> tuple[tuple[int, int], ...]:
+    """The epoch-2 band (multilevel spec §10.2) as ((max_cells, max_m), ...),
+    ascending in max_cells, read from the frozen manifest."""
+    from ..manifest import load_epoch
+
+    band = load_epoch(2)["feasibility_band"]["supported"]
+    return tuple(sorted((int(b["max_cells"]), int(b["max_m"])) for b in band))
+
+
+def in_feasibility_band(n_cells: int, m: int) -> bool:
+    """True iff encoding F(S, m) for an n_cells shape is inside the epoch-2
+    band. Outside it check_proof_v2 answers RESOURCE_EXCEEDED by policy."""
+    if m < 1 or n_cells < 1:
+        return False
+    for max_cells, max_m in feasibility_band():
+        if n_cells <= max_cells:
+            return m <= max_m
+    return False
