@@ -55,7 +55,7 @@ rejections:
    Beauquier–Nivat translation and Conway half-turn on all three grids over
    the appropriate edge alphabet (4 letters square; 6 letters hex and the
    iamond vertex-lattice embedding), Langerman–Winslow quarter-turn on
-   squares — and, when enabled, the periodic-tiling search. These prove
+   squares — and the periodic-tiling search (`heesch_verify/periodic.py`: a budgeted exact-cover search for a torus tiling by K ≤ 8 copies; every hit is re-verified as an exact partition, so it is a proof). These prove
    `TILER` only; they never return `NON_TILER` (anisohedral tilers exist).
    Reflection forms (L–W types 4–7) and hex 60°/120° rotation forms are not
    implemented — a wrong `TILER` would reject a legitimate submission, so a

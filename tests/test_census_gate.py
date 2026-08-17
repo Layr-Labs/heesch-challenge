@@ -91,9 +91,14 @@ def test_census_decides_every_shape_and_misses_nothing(gid, n):
 
 
 @pytest.mark.parametrize("gid,n", SIZES)
-def test_criteria_never_call_a_census_nontiler_tiler(gid, n):
+def test_criteria_never_call_a_census_nontiler_tiler(gid, n, monkeypatch):
     """Soundness of the constructive layer (boundary-word factorizations,
-    periodic search) against the complete published non-tiler lists."""
+    periodic search) against the complete published non-tiler lists. The
+    periodic search is budget-bounded per shape here (its verdicts are
+    re-verified partitions, so soundness does not depend on the budget);
+    tests/test_periodic.py runs the full budget on a sample."""
+    import heesch_verify.periodic as periodic
+    monkeypatch.setattr(periodic, "DEFAULT_BUDGET", 60_000)
     grid = GRIDS[gid]
     gate = IsohedralGate(grid)
     for cells in _forms(gid, n):

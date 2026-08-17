@@ -85,6 +85,17 @@ and the proof path **enforced**:
   CI the real `cake_lpr` runs; elsewhere the tests use a labelled shim for
   the control flow only.
 
+### Constructive filter strengthened (audit "recommended combined architecture", fast constructive tiler filters)
+- New `heesch_verify/periodic.py`: a deterministic, budget-bounded exact-cover
+  search for a periodic (torus) tiling by K ≤ 8 copies in any orientation;
+  every hit is re-verified as an exact partition of the torus, so a `TILER`
+  verdict stays constructive. Bypassing the census, it catches all 89 / 37 /
+  79 tilers the audit reported missed at 9-ominoes / 7-hexes / 10-iamonds
+  (`tests/test_periodic.py`), with zero false `TILER`s over the published
+  non-tilers (`tests/test_census_gate.py`). Under fail-closed it only improves
+  the rejection reason (`GATE_IS_TILER` vs `GATE_INCONCLUSIVE`) for
+  anisohedral tilers above the census.
+
 ### High 3 — documentation understates the tiler-gate gap — CLOSED
 - README, `docs/CONVENTIONS.md`, `docs/COORDINATION.md`, `docs/REVIEW-FIXES.md`
   (dated addendum) now state the exact guarantee in the audit's own words:
