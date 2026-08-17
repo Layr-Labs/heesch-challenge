@@ -1,6 +1,6 @@
 """heesch_encoder — frozen CNF encoder for corona-existence formulas.
 
-Companion to heesch_verify (see heesch-cnf-encoder-spec.md). This package is
+Companion to heesch_verify (see docs/heesch-cnf-encoder-spec.md). This package is
 the trust boundary of the exactness claim: a proof certifies that one
 specific formula is unsatisfiable, and only the theorems and round-trip
 tests behind this encoder connect that formula to the geometry.

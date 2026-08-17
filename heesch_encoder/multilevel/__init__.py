@@ -1,6 +1,6 @@
 """heesch_encoder.multilevel — the v2 multi-level encoder.
 
-Implements heesch-multilevel-encoder-spec.md: one formula F(S, m) whose UNSAT
+Implements docs/heesch-multilevel-encoder-spec.md: one formula F(S, m) whose UNSAT
 proves no weak m-configuration exists (obligations M1–M9). Everything here is
 additive to v1: the v1 modules, epoch-1 manifest, and their digests are
 byte-stable.

@@ -1,4 +1,4 @@
-"""Non-tiler gates (architecture spec §2.1–2.3). May shell out; never
+"""Non-tiler gates (docs/heesch-verifier-architecture.md §2.1–2.3). May shell out; never
 imported by witness.py or anything it imports.
 
 The acceptance rule is fail-closed (§2.2): a submission scores only when the

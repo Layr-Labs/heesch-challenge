@@ -1,6 +1,6 @@
 # Frozen conventions — epoch v1
 
-Every one of these changes the answer (architecture spec §11). They were
+Every one of these changes the answer (docs/heesch-verifier-architecture.md §11). They were
 derived from Kaplan's heesch-sat source (see `tools/NOTES-kaplan.md` for the
 transcription) and are re-confirmed by the calibration corpus; they are
 written into every result record. Changing any of them is a new epoch and
