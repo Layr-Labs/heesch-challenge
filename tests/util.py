@@ -74,3 +74,54 @@ def domino_hc1() -> str:
     placements.append((1, xf_t(-2, 0)))
     placements.append((1, xf_t(2, 0)))
     return witness_text("O", [(0, 0), (1, 0)], 1, 1, [placements])
+
+
+# ---------------------------------------------------------------------------
+# Proof-path helpers (architecture §13). The 11-omino below is a Kaplan
+# non-tiler (11omino_2up: Hc=1, Hh=2) OUTSIDE the census bound (O <= 10), so
+# under the fail-closed rule it scores only with a #PROOF block. F(S,2) is
+# SAT for it (Hh = 2); F(S,3) is UNSAT and small (a few hundred KB of DRAT).
+
+OMINO11_CELLS = [(0, 1), (1, 1), (2, 0), (2, 1), (2, 2), (3, 1), (3, 2),
+                 (4, 0), (4, 1), (4, 2), (5, 2)]
+
+
+def omino11_hc1() -> str:
+    """The 11-omino with a verified 1-corona (hc = hh = 1)."""
+    placements = [
+        (0, "<1,0,0,0,1,0>"),
+        (1, "<1,0,-1,0,-1,0>"), (1, "<-1,0,1,0,1,1>"), (1, "<-1,0,9,0,-1,1>"),
+        (1, "<-1,0,6,0,-1,5>"), (1, "<-1,0,0,0,-1,1>"), (1, "<-1,0,10,0,1,1>"),
+    ]
+    return witness_text("O", OMINO11_CELLS, 1, 1, [placements])
+
+
+def checker_dir_for_tests(tmp_path) -> pathlib.Path | None:
+    """A checker directory the ProofCarryingGate accepts. Uses the real
+    tools/bin binaries; where cake_lpr is not buildable (non-x86-64-Linux) a
+    SHIM named cake_lpr wraps lrat-check and rewrites its verdict line — TEST
+    ONLY, so the record-tier control flow can be exercised everywhere; the
+    real formally-verified checker runs on the Linux CI/benchmark runner.
+    Returns None if drat-trim/lrat-check are not built."""
+    import os
+    import shutil
+    import stat
+
+    bin_dir = ROOT / "tools" / "bin"
+    real = {n: bin_dir / n for n in ("drat-trim", "lrat-check", "cake_lpr")}
+    if not real["drat-trim"].exists() or not real["lrat-check"].exists():
+        return None
+    d = tmp_path / "checkers"
+    d.mkdir(exist_ok=True)
+    for n in ("drat-trim", "lrat-check"):
+        shutil.copy2(real[n], d / n)
+    if real["cake_lpr"].exists():
+        shutil.copy2(real["cake_lpr"], d / "cake_lpr")
+    else:
+        shim = d / "cake_lpr"
+        shim.write_text(
+            "#!/bin/sh\n# TEST SHIM: stands in for cake_lpr where it cannot be built.\n"
+            f"'{d / 'lrat-check'}' \"$@\" | sed 's/^c VERIFIED$/s VERIFIED UNSAT/'\n"
+        )
+        shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return d

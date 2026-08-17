@@ -51,6 +51,23 @@ fi
 "${vpy}" -m pip install --quiet --upgrade pip
 "${vpy}" -m pip install --quiet "${root}"
 
+# Proof checkers (record tier, architecture §13): compiled from the vendored,
+# hash-pinned sources into tools/bin. The harness locates them explicitly
+# (HEESCH_CHECKER_DIR or <repo>/tools/bin) because it runs from the installed
+# package. On x86-64 Linux — the benchmark runner — all three must build;
+# elsewhere cake_lpr cannot, and proof-carrying submissions are rejected as
+# CHECKER_UNAVAILABLE (fail closed).
+if command -v cc >/dev/null 2>&1 || command -v gcc >/dev/null 2>&1; then
+  bash "${root}/tools/build_checkers.sh"
+else
+  echo "!! no C compiler found; proof checkers not built (proof-carrying submissions will be rejected CHECKER_UNAVAILABLE)" >&2
+fi
+if [[ "$(uname -s)" == "Linux" && "$(uname -m)" == "x86_64" ]]; then
+  for c in drat-trim lrat-check cake_lpr; do
+    [[ -x "${root}/tools/bin/${c}" ]] || { echo "!! ${c} missing after build" >&2; exit 1; }
+  done
+fi
+
 # Optional: bubblewrap gives benchmark.sh its no-network sandbox on Linux.
 # Best effort; benchmark.sh warns and continues without it.
 if [[ "$(uname -s)" == "Linux" ]] && ! command -v bwrap >/dev/null 2>&1; then

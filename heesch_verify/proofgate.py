@@ -176,11 +176,12 @@ def materialize_proof(src: pathlib.Path, dst: pathlib.Path, compression: str) ->
 
 
 class ProofCarryingGate:
-    """Enforced non-tiler proof gate. `root` is the directory holding
-    `submission/`; `checker_dir` holds the vendored checker binaries."""
+    """Enforced non-tiler proof gate. `submission_dir` is the directory that
+    holds best.heesch and the proof file it names; `checker_dir` holds the
+    vendored checker binaries."""
 
-    def __init__(self, root, checker_dir, budget=None):
-        self.root = pathlib.Path(root)
+    def __init__(self, submission_dir, checker_dir, budget=None):
+        self.submission_dir = pathlib.Path(submission_dir)
         self.checker_dir = pathlib.Path(checker_dir)
         self.budget = budget
 
@@ -228,7 +229,7 @@ class ProofCarryingGate:
                 m=m,
             )
         # 4. Materialize the proof file into scratch.
-        src = self.root / "submission" / block.file_name
+        src = self.submission_dir / block.file_name
         scratch = pathlib.Path(tempfile.mkdtemp(prefix="heesch-proof-"))
         try:
             dst = scratch / f"proof.{block.fmt}"

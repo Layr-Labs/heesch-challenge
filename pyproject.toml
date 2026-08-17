@@ -19,6 +19,10 @@ test = [
     "pytest==9.0.3",
     "python-sat==1.9.dev7",
 ]
+# Participant-side proof production (tools/prove.py); never a harness dep.
+prove = [
+    "python-sat==1.9.dev7",
+]
 
 [tool.setuptools]
 packages = [
@@ -32,3 +36,9 @@ packages = [
 [tool.setuptools.package-data]
 heesch_encoder = ["epoch/*.json"]
 heesch_verify = ["known_nontilers.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Slow suites: the census enumeration (tests/test_census_gate.py, ~1 min) and
+# the real-checker proof e2e (tests/test_proof_gate.py). Both run in CI.
+addopts = "-p no:cacheprovider"

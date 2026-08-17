@@ -16,7 +16,8 @@ placement-level counts explode. The tests therefore work at two levels:
 
 import pytest
 
-from pysat.solvers import Solver
+pysat_solvers = pytest.importorskip("pysat.solvers")
+Solver = pysat_solvers.Solver
 
 from conftest import FIXTURES
 

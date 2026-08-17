@@ -105,7 +105,7 @@ def _run_proof_gate(sub, outcome):
     from heesch_encoder.proofcheck.checkers import CheckBudget
 
     checker_dir = pathlib.Path(os.environ.get("HEESCH_CHECKER_DIR") or (ROOT / "tools" / "bin"))
-    return ProofCarryingGate(ROOT, checker_dir, CheckBudget()).check(sub, outcome)
+    return ProofCarryingGate(SHAPE_PATH.parent, checker_dir, CheckBudget()).check(sub, outcome)
 
 
 def main() -> None:
