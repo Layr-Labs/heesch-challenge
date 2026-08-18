@@ -105,7 +105,7 @@ jobs:
           score=$(jq -er '.score | select(type == "number")' score.json)
           hc=$(jq -er '.metrics.hc_verified | select(type == "number")' score.json)
           evidence=$(jq -er '.metrics.non_tiler_evidence | select(. == "census" or . == "proof")' score.json)
-          exact=$(jq -er '.metrics.exact' score.json)
+          exact=$(jq -r '.metrics.exact' score.json)
           echo "score=$score (hc_verified=$hc, non_tiler_evidence=$evidence, exact=$exact)" | tee -a benchmark-results/runner.txt
           echo "value=$score" >> "$GITHUB_OUTPUT"
 
