@@ -20,7 +20,7 @@ import sys
 
 import pytest
 
-from util import ROOT, checker_dir_for_tests, omino11_hc1
+from util import ROOT, checker_dir_for_tests, omino11_hc1, solve_drat
 
 from heesch_verify.canonical import canonical_form
 from heesch_verify.parse import parse_submission
@@ -56,30 +56,20 @@ def _block(m, cnf, nv, nc, name, fmt, comp, payload):
     return f"#PROOF 1\nencoder heesch-encoder/v2 2 {m}\ncnf {cnf} {nv} {nc}\nfile {name} {fmt} {comp} {payload}\n"
 
 
-def _pysat_with_proof():
-    """pysat with DRAT logging. On Windows the native solver's proof-logging
-    mode crashes the interpreter at shutdown (0xC0000409 fail-fast) after
-    the tests pass, so proof GENERATION is skipped there; the checkers
-    (cake_lpr) are Linux-only anyway, and the harness side never needs pysat."""
-    if os.name == "nt":
-        pytest.skip("pysat proof logging crashes at interpreter exit on Windows")
-    return pytest.importorskip("pysat.solvers")
-
-
 @pytest.fixture(scope="module")
-def unsat_proof():
-    """A real F(S,3) DRAT for the 11-omino (Hh = 2, so F(S,3) is UNSAT)."""
-    pysat = _pysat_with_proof()
+def unsat_proof(tmp_path_factory):
+    """A real F(S,3) DRAT for the 11-omino (Hh = 2, so F(S,3) is UNSAT),
+    produced by tools/prove.py's worker (pysat in a child process — the same
+    path participants use; see util.solve_drat)."""
+    pytest.importorskip("pysat.solvers")
     from heesch_encoder.multilevel.api import encode_multilevel
 
     out = verify_witness(CENSUS_11)
     sub = out.submission
     tile = frozenset(canonical_form(sub.cells, sub.grid, True))
     enc = encode_multilevel(tile, sub.grid, out.contact, 3)
-    with pysat.Solver(name="cadical153", bootstrap_with=[list(c) for c in enc.formula.clauses],
-                      with_proof=True) as s:
-        assert not s.solve()
-        drat = ("\n".join(s.get_proof()) + "\n0\n").encode("ascii")
+    sat, drat = solve_drat(enc.dimacs, tmp_path_factory.mktemp("proof"))
+    assert not sat
     return {"enc": enc, "drat": drat, "sha": hashlib.sha256(drat).hexdigest()}
 
 
@@ -267,7 +257,7 @@ def test_cli_check_proof_matches_harness(tmp_path, unsat_proof):
 def test_census_shape_plus_exact_proof(tmp_path):
     """A census shape may ALSO carry a proof: with m = hh + 1 the value is
     exact and both evidences are recorded (census+proof)."""
-    pysat = _pysat_with_proof()
+    pytest.importorskip("pysat.solvers")
     d = checker_dir_for_tests(tmp_path)
     if d is None:
         pytest.skip("tools/bin checkers not built")
@@ -278,10 +268,8 @@ def test_census_shape_plus_exact_proof(tmp_path):
     sub = out.submission
     tile = frozenset(canonical_form(sub.cells, sub.grid, True))
     enc = encode_multilevel(tile, sub.grid, out.contact, 2)
-    with pysat.Solver(name="cadical153", bootstrap_with=[list(c) for c in enc.formula.clauses],
-                      with_proof=True) as s:
-        assert not s.solve()
-        drat = ("\n".join(s.get_proof()) + "\n0\n").encode("ascii")
+    sat, drat = solve_drat(enc.dimacs, tmp_path)
+    assert not sat
     sha = hashlib.sha256(drat).hexdigest()
     full = text + _block(2, enc.digest, enc.num_vars, enc.num_clauses, "p.drat", "drat", "none", sha)
     proc, score = _run_harness(tmp_path, full, files=[("p.drat", drat)], checker_dir=d)

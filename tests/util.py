@@ -125,3 +125,19 @@ def checker_dir_for_tests(tmp_path) -> pathlib.Path | None:
         )
         shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return d
+
+
+def solve_drat(dimacs: bytes, tmp_path, solver: str = "cadical153"):
+    """(sat, drat_bytes|None) via tools/prove.py's worker process — the same
+    code participants run. The solve happens in a child process (python-sat's
+    proof-logging mode can crash the interpreter at exit on Windows) and the
+    DRAT is always re-verified by the checkers downstream."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("prove", ROOT / "tools" / "prove.py")
+    prove = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(prove)
+    work = pathlib.Path(tmp_path) / "solve"
+    work.mkdir(parents=True, exist_ok=True)
+    sat, drat_path = prove.solve_with_proof(dimacs, solver, work)
+    return sat, (None if sat else drat_path.read_bytes())

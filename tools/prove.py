@@ -71,7 +71,72 @@ def sha256_file(path: pathlib.Path) -> str:
     return h.hexdigest()
 
 
+def _worker(cnf_path: str, drat_path: str, result_path: str, solver: str) -> None:
+    """Solve the DIMACS at cnf_path with proof logging and write the DRAT.
+    Runs in a child process: python-sat's proof-logging mode can crash the
+    interpreter during finalization on some platforms (seen on Windows,
+    0xC0000409 fail-fast) AFTER the solve is complete, so the work is done
+    here, files are flushed, and the process leaves via os._exit(0) without
+    running interpreter teardown. The parent trusts nothing from this process
+    except the files: the DRAT is verified by drat-trim / the harness."""
+    import json
+
+    from pysat.formula import CNF
+    from pysat.solvers import Solver
+
+    cnf = CNF(from_file=cnf_path)
+    with Solver(name=solver, bootstrap_with=cnf.clauses, with_proof=True) as s:
+        sat = s.solve()
+        proof = None if sat else s.get_proof()
+    if not sat:
+        with open(drat_path, "w", encoding="ascii", newline="\n") as fh:
+            fh.write("\n".join(proof) + "\n0\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+    with open(result_path, "w", encoding="ascii") as fh:
+        json.dump({"sat": bool(sat), "solver": solver}, fh)
+        fh.flush()
+        os.fsync(fh.fileno())
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
+
+
+def solve_with_proof(dimacs: bytes, solver: str, workdir: pathlib.Path) -> tuple[bool, pathlib.Path | None]:
+    """Run the worker; return (sat, drat_path). Raises RuntimeError if the
+    worker produced no result (crash before finishing, missing pysat, ...)."""
+    import json
+
+    cnf_path = workdir / "formula.cnf"
+    drat_path = workdir / "proof.drat"
+    result_path = workdir / "solve.json"
+    for pth in (drat_path, result_path):
+        if pth.exists():
+            pth.unlink()
+    cnf_path.write_bytes(dimacs)
+    proc = subprocess.run(
+        [sys.executable, str(pathlib.Path(__file__).resolve()), "--worker",
+         str(cnf_path), str(drat_path), str(result_path), solver],
+        capture_output=True, text=True, errors="replace",
+    )
+    if not result_path.exists():
+        raise RuntimeError(
+            f"solver worker produced no result (exit {proc.returncode}):\n"
+            + (proc.stderr or proc.stdout)[-1500:]
+        )
+    res = json.loads(result_path.read_text())
+    if res["sat"]:
+        return True, None
+    text = drat_path.read_text(encoding="ascii")
+    if not text.endswith("\n0\n"):
+        raise RuntimeError("solver worker wrote an incomplete DRAT")
+    return False, drat_path
+
+
 def main(argv=None) -> int:
+    if argv is None and len(sys.argv) >= 6 and sys.argv[1] == "--worker":
+        _worker(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
+        return 0  # unreachable: the worker exits via os._exit
     ap = argparse.ArgumentParser(prog="prove.py", description=__doc__.split("\n\n")[0])
     ap.add_argument("shape_file", help="submission/best.heesch")
     ap.add_argument("--m", type=int, default=None, help="proof level (default hh_verified + 1)")
@@ -110,28 +175,30 @@ def main(argv=None) -> int:
     print(f"  {enc.num_vars} vars, {enc.num_clauses} clauses, digest {enc.digest[:16]}…", flush=True)
 
     try:
-        from pysat.solvers import Solver
+        import pysat  # noqa: F401
     except ImportError:
         print("error: python-sat not installed (pip install -e '.[prove]')", file=sys.stderr)
         return 1
-    print(f"solving with {args.solver} (proof logging on) ...", flush=True)
-    with Solver(name=args.solver, bootstrap_with=[list(c) for c in enc.formula.clauses],
-                with_proof=True) as s:
-        sat = s.solve()
-        if sat:
-            print(f"SAT: F(S,{m}) is satisfiable — a weak {m}-configuration exists, so no "
-                  f"UNSAT proof at this m. Try a deeper witness / larger m, or the shape may tile.")
-            return 2
-        proof_lines = s.get_proof()
-
     name = args.out or ("proof." + args.format + (".xz" if args.xz else ""))
     dest_dir = shape_path.parent
     tmpdir = dest_dir / ".prove-tmp"
     tmpdir.mkdir(exist_ok=True)
-    drat_path = tmpdir / "proof.drat"
-    drat_path.write_text("\n".join(proof_lines) + "\n0\n", encoding="ascii")
+    print(f"solving with {args.solver} (proof logging on, worker process) ...", flush=True)
+    try:
+        sat, drat_path = solve_with_proof(enc.dimacs, args.solver, tmpdir)
+    except RuntimeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    if sat:
+        print(f"SAT: F(S,{m}) is satisfiable — a weak {m}-configuration exists, so no "
+              f"UNSAT proof at this m. Try a deeper witness / larger m, or the shape may tile.")
+        for leftover in tmpdir.iterdir():
+            leftover.unlink()
+        tmpdir.rmdir()
+        return 2
     payload_path = drat_path
-    drat_trim = pathlib.Path(os.environ.get("HEESCH_CHECKER_DIR") or (ROOT / "tools" / "bin")) / "drat-trim"
+    from heesch_encoder.proofcheck.checkers import checker_path
+    drat_trim = checker_path("drat-trim", os.environ.get("HEESCH_CHECKER_DIR") or (ROOT / "tools" / "bin"))
     need_trim = args.format == "lrat" or not args.no_selfcheck
     if need_trim and not drat_trim.exists():
         if args.format == "lrat":
