@@ -49,7 +49,7 @@ jobs:
           # e2e tests below run against the real cake_lpr on this runner.
           test -x tools/bin/cake_lpr
       - name: Tests
-        run: python -m pytest tests/ -q
+        run: python -X dev -m pytest tests/ -q -ra -W default
       - name: Proof path e2e (real checkers) and census regression
         if: runner.os == 'Linux'
         run: python -m pytest tests/test_proof_gate.py tests/test_census_gate.py -q -rs
