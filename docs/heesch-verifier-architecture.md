@@ -366,8 +366,8 @@ is `CHECKER_UNAVAILABLE`, never a downgrade. Triage tier (one checker) exists
 for library/tests only.
 
 ### 13.5 Budgets
-`checkers.CheckBudget`: per-checker caps drat-trim 540 s, cake_lpr 420 s,
-lrat-check 180 s, overall deadline 1200 s; each spawn gets
+`checkers.CheckBudget`: per-checker caps drat-trim 600 s, cake_lpr 900 s,
+lrat-check 300 s, overall deadline 1500 s; each spawn gets
 `min(cap, deadline - now)`; a non-positive remainder is `RESOURCE_EXCEEDED`
 without spawning. Together with the witness stage and the encoding this fits
 the 30-minute benchmark job.

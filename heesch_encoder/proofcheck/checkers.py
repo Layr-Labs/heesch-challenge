@@ -33,9 +33,9 @@ class CheckBudget:
     overall deadline. Every spawn gets min(cap, time left); a non-positive
     remainder is RESOURCE_EXCEEDED without spawning."""
 
-    DEFAULT_CAPS = {"drat-trim": 540.0, "cake_lpr": 420.0, "lrat-check": 180.0}
+    DEFAULT_CAPS = {"drat-trim": 600.0, "cake_lpr": 900.0, "lrat-check": 300.0}
 
-    def __init__(self, per_checker: dict | None = None, deadline_seconds: float = 1200.0):
+    def __init__(self, per_checker: dict | None = None, deadline_seconds: float = 1500.0):
         import time
 
         self.caps = dict(self.DEFAULT_CAPS)
@@ -114,7 +114,7 @@ def cake_lpr_heap_mb() -> int:
         pass
     if avail_mb is None:
         return 4096
-    return max(CAKE_LPR_HEAP_MB_MIN, min(CAKE_LPR_HEAP_MB_MAX, int(avail_mb * 0.7)))
+    return max(CAKE_LPR_HEAP_MB_MIN, min(CAKE_LPR_HEAP_MB_MAX, int(avail_mb * 0.85)))
 
 
 def _run(name: str, args: list[str], timeout: float, bin_dir=None,

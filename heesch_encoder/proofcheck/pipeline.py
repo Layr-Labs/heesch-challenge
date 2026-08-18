@@ -277,7 +277,10 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
                             cnf_digest=enc.digest, proof_bytes=proof_bytes,
                             checker_results=tuple(results), check_seconds=seconds)
     if any(r.status is ck.CheckStatus.RESOURCE_EXCEEDED for r in results):
-        return ProofOutcome(ProofStatus.RESOURCE_EXCEEDED, "checker timeout/oom",
+        return ProofOutcome(ProofStatus.RESOURCE_EXCEEDED,
+                            "checker resource limit: " + "; ".join(
+                                f"{r.checker} {r.status.value} after {r.seconds:.0f}s"
+                                + (f" ({r.detail[:160]})" if r.detail else "") for r in results),
                             cnf_digest=enc.digest, proof_bytes=proof_bytes,
                             checker_results=tuple(results), check_seconds=seconds)
 

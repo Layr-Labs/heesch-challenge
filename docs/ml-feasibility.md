@@ -136,6 +136,6 @@ shape is producible on a laptop in under ten minutes and checkable inside
 the 30-minute benchmark job; participants submit the xz-compressed LRAT
 (`tools/prove.py` defaults to `--format lrat --xz`). The `F(S,5)` for the
 11-hex is UNSAT in ~30 s and `F(S,4)` SAT in ~8 s. Checker time on the
-resulting instances is bounded separately (`CheckBudget`: drat-trim 540 s,
-cake_lpr 420 s, lrat-check 180 s, 1200 s overall); an honest proof that does
+resulting instances is bounded separately (`CheckBudget`: drat-trim 600 s,
+cake_lpr 900 s, lrat-check 300 s, 1500 s overall); an honest proof that does
 not fit is `RESOURCE_EXCEEDED`, never scored and never silently accepted.
