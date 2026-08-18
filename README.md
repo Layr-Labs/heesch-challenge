@@ -141,10 +141,12 @@ search loop; they are API (`docs/heesch-verifier-architecture.md` §8).
   (`PROOF_LEVEL_INCONSISTENT`); the size must be inside the in-harness band
   (≤ 12 cells `m ≤ 6`, ≤ 20 `m ≤ 5`, ≤ 50 `m ≤ 3`, ≤ 100 `m ≤ 2`, else
   `RESOURCE_EXCEEDED` — every known Hc = 4 shape's exactness proof `F(S,5)`
-  fits, and an `Hc ≥ 5` certificate `F(S,6)` fits for shapes up to 12 cells
-  (measured: ~2 min to encode, ~3 min to solve, 25 MB xz LRAT); larger
-  shapes at that depth go through the out-of-band record procedure,
-  `docs/heesch-verifier-architecture.md` §13.9);
+  fits; an `Hc ≥ 5` certificate `F(S,6)` is producible for shapes up to
+  12 cells (measured: ~2 min to encode, ~3 min to solve, 25 MB xz LRAT) and
+  is checked in-band on runners with ≥ 12 GB RAM — on the standard 8 GB
+  GitHub runner the formally-verified checker runs out of heap and the
+  submission is `RESOURCE_EXCEEDED`, which routes it to the out-of-band
+  record procedure, `docs/heesch-verifier-architecture.md` §13.9);
   a proof block that is present but broken rejects even a census shape.
   `m = hh + 1` makes the value exact; larger `m` certifies non-tilerhood
   with the lower bound only.

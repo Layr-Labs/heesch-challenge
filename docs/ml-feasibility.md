@@ -132,9 +132,15 @@ Full record-scale cycle for the 11-hex `F(S,6)` (the size of an Hc = 5
 certificate for a shape of that size): solve UNSAT in 157 s (cadical153,
 proof logging; DRAT 2.2 GB), drat-trim verify + LRAT emission 61 s (LRAT
 513 MB, **25 MB xz**), lrat-check 16 s. So an Hc = 5 proof for a ≤ 12-cell
-shape is producible on a laptop in under ten minutes and checkable inside
-the 30-minute benchmark job; participants submit the xz-compressed LRAT
-(`tools/prove.py` defaults to `--format lrat --xz`). The `F(S,5)` for the
+shape is producible on a laptop in under ten minutes; participants submit
+the xz-compressed LRAT (`tools/prove.py` defaults to `--format lrat --xz`).
+Checking it at record tier needs `cake_lpr` to hold the 13 M-clause CNF: on
+the standard 8 GB GitHub runner (2 vCPU, 7.9 GB) it exhausted a ~5.9 GB heap
+after 296 s (measured 2026-08-18, run 32094317230) → `RESOURCE_EXCEEDED`;
+a ≥ 12 GB runner (`HEESCH_CAKE_HEAP_MB` sizes the heap automatically from
+available memory) checks it in-band. The 11-omino `F(S,6)` (13.1 M clauses,
+1.45 GB) proof was produced in 3 min 40 s on the laptop (cadical153's DRAT
+was rejected by drat-trim, glucose4's verified — the auto solver fallback). The `F(S,5)` for the
 11-hex is UNSAT in ~30 s and `F(S,4)` SAT in ~8 s. Checker time on the
 resulting instances is bounded separately (`CheckBudget`: drat-trim 600 s,
 cake_lpr 900 s, lrat-check 300 s, 1500 s overall); an honest proof that does

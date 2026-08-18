@@ -13,6 +13,11 @@ concurrency:
 
 jobs:
   benchmark:
+    # The standard 8 GB runner checks every proof inside the band except the
+    # record-depth F(S,6) case, where cake_lpr needs > 6 GB of heap
+    # (RESOURCE_EXCEEDED, out-of-band procedure). A larger-runner label here
+    # (>= 12 GB) makes that case in-band; the harness sizes the CakeML heap
+    # from available memory (override: HEESCH_CAKE_HEAP_MB).
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 

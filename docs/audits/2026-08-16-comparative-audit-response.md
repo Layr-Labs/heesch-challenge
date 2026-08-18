@@ -168,9 +168,12 @@ census — heesch-sat's own output — is the calibration anchor.
   (measured: 11-hex 60 s encode / 26 s UNSAT; 20-iamond 173 s encode), and
   an Hc = 5 certificate `F(S,6)` fits for shapes up to 12 cells (11-hex:
   112 s encode at 2.5 GB with the streamed encoder, UNSAT in 157 s, LRAT
-  513 MB / 25 MB xz, checked in ~80 s). Larger shapes at m = 6 go through the
-  out-of-band record procedure (architecture §13.9). Stated plainly in README
-  and the multilevel spec §10.2.
+  513 MB / 25 MB xz, checked in ~80 s by drat-trim + lrat-check). The
+  formally-verified `cake_lpr` needs > 6 GB of heap for that CNF, so on the
+  standard 8 GB GitHub runner the record-depth check answers
+  `RESOURCE_EXCEEDED` (measured) and the submission goes through the
+  out-of-band record procedure (architecture §13.9); on a ≥ 12 GB runner it
+  is checked in-band. Stated plainly in README and the multilevel spec §10.2.
 - Census evidence is a trusted published computation, not a proof
   certificate; replacing it with maintainer-generated checked proofs for the
   small shapes is listed as future work (architecture §15, threat model R1).

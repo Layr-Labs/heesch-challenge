@@ -79,7 +79,7 @@ def test_cake_lpr_heap_exhaustion_is_resource_not_verdict(monkeypatch, tmp_path)
     RESOURCE_EXCEEDED, never NOT_VERIFIED (seen on the benchmark runner for a
     record-scale LRAT: 'CakeML heap space exhausted.')."""
     monkeypatch.setattr(ck, "_BIN", tmp_path)
-    (tmp_path / "cake_lpr").write_text("")
+    ck.checker_path("cake_lpr", tmp_path).write_text("")  # .exe on Windows
     seen = {}
 
     def run(cmd, *a, **k):

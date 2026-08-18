@@ -397,10 +397,11 @@ A `record_eligible` entry (exact, proof-backed, `hc_verified >= 5`) is a
 machine-checked research claim. Two ways it can arise:
 
 **In-band.** The submission carries the `F(S, k+1)` proof and the harness
-verifies it inside the benchmark job (bands in §13.3: today that covers an
-`Hc = 5` certificate for shapes up to 12 cells, measured in
-`docs/ml-feasibility.md`). The score is recorded like any other; the
-`record_eligible` flag is set from the metrics.
+verifies it inside the benchmark job (bands in §13.3: an `Hc = 5` certificate
+for shapes up to 12 cells is producible and inside the band, but checking it
+needs a runner with ≥ 12 GB RAM for `cake_lpr`'s heap — the standard 8 GB
+runner answers `RESOURCE_EXCEEDED`; `docs/ml-feasibility.md`). The score is
+recorded like any other; the `record_eligible` flag is set from the metrics.
 
 **Out-of-band.** A witness whose shape or depth is outside the in-harness
 band cannot score by itself (fail closed: `RESOURCE_EXCEEDED` for the proof,

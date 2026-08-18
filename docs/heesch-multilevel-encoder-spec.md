@@ -187,10 +187,14 @@ has its exactness proof `F(S, 5)` inside both bands (11-hex: 60 s encode,
 UNSAT in ~30 s; 20-iamond: 173 s encode). **An `Hc = 5` certificate is
 `F(S, 6)`**: for the 11-hex it encodes in 112 s at 2.5 GB RSS (17.2 M
 clauses, 2.1 GB DIMACS), is UNSAT in 157 s, drat-trim verifies and emits the
-LRAT in 61 s (513 MB, 25 MB xz), lrat-check verifies in 16 s — inside the
-benchmark job for shapes up to 12 cells. Larger shapes at m = 6 (a 20-cell
-shape would be ~5× that) are the next widening question, and beyond the
-band the out-of-band record procedure applies (architecture §13.9).
+LRAT in 61 s (513 MB, 25 MB xz), lrat-check verifies in 16 s. The
+formally-verified `cake_lpr` needs more than ~6 GB of heap to load that CNF:
+on the standard 8 GB GitHub runner it reports `CakeML heap space exhausted`
+after ~5 min and the harness answers `RESOURCE_EXCEEDED` (naming the checker,
+never `NOT_VERIFIED`); on a ≥ 12 GB machine it is checked in-band. Larger
+shapes at m = 6 (a 20-cell shape would be ~5× that) are the next widening
+question, and beyond what the runner can check the out-of-band record
+procedure applies (architecture §13.9).
 
 ## 11. Frozen constants (revision 2)
 
