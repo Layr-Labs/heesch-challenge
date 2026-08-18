@@ -13,16 +13,16 @@ H = "a" * 64
 G = "b" * 64
 
 
-def block(m=2, enc="heesch-encoder/v2", epoch="2", cnf=H, nv="10", nc="20",
+def block(m=2, enc="heesch-encoder/v2", revision="2", cnf=H, nv="10", nc="20",
           name="proof.drat", fmt="drat", comp="none", payload=G, header="#PROOF 1"):
-    return (f"{header}\nencoder {enc} {epoch} {m}\ncnf {cnf} {nv} {nc}\n"
+    return (f"{header}\nencoder {enc} {revision} {m}\ncnf {cnf} {nv} {nc}\n"
             f"file {name} {fmt} {comp} {payload}\n")
 
 
 def test_valid_block_round_trips():
     sub = parse_submission(monomino_hc1() + block())
     assert sub.proof == ProofBlock(
-        m=2, encoder_version="heesch-encoder/v2", epoch=2, cnf_digest=H, num_vars=10,
+        m=2, encoder_version="heesch-encoder/v2", revision=2, cnf_digest=H, num_vars=10,
         num_clauses=20, file_name="proof.drat", fmt="drat", compression="none",
         payload_sha256=G,
     )
@@ -42,7 +42,7 @@ def test_no_block_is_none():
     block(header="#PROOF 2"),              # unknown schema
     block(header="#PROOFX 1"),             # marker must be exact (audit V7 rule)
     block(enc="heesch-encoder/v1"),        # v1 is not accepted (E8)
-    block(epoch="1"),
+    block(revision="1"),
     block(m=0), block(m=9), block(m="two"),
     block(cnf="A" * 64), block(cnf="a" * 63), block(cnf="a" * 65),
     block(nv="0"), block(nc="0"), block(nv="-1"),
@@ -101,3 +101,30 @@ def test_emit_epoch_strips_proof_block(tmp_path):
     src.write_text(monomino_hc1() + block(), encoding="ascii")
     assert cli.main([str(src), "--emit-epoch", str(out)]) == 0
     assert out.read_text() == monomino_hc1()
+
+
+CORE = "core core.txt.xz xz " + "c" * 64 + " 6305\n"
+
+
+def test_core_line_round_trips():
+    sub = parse_submission(monomino_hc1() + block(name="p.lrat.xz", fmt="lrat", comp="xz") + CORE)
+    assert sub.proof.core_file == "core.txt.xz" and sub.proof.core_compression == "xz"
+    assert sub.proof.core_sha256 == "c" * 64 and sub.proof.core_clauses == 6305
+
+
+@pytest.mark.parametrize("bad", [
+    block() + CORE,                                                    # core with drat
+    block(name="p.lrat", fmt="lrat") + "core core.txt xz " + "c" * 64 + " 5\n",   # xz says .xz
+    block(name="p.lrat", fmt="lrat") + "core core.txt.xz none " + "c" * 64 + " 5\n",
+    block(name="p.lrat", fmt="lrat") + "core ../c.txt none " + "c" * 64 + " 5\n",
+    block(name="p.lrat", fmt="lrat") + "core p.lrat none " + "c" * 64 + " 5\n",     # same as proof
+    block(name="p.lrat", fmt="lrat") + "core best.heesch none " + "c" * 64 + " 5\n",
+    block(name="p.lrat", fmt="lrat") + "core c.txt none " + "C" * 64 + " 5\n",
+    block(name="p.lrat", fmt="lrat") + "core c.txt none " + "c" * 64 + " 0\n",
+    block(name="p.lrat", fmt="lrat") + "core c.txt none " + "c" * 64 + "\n",
+    block(name="p.lrat", fmt="lrat") + CORE.replace(".xz", "") + CORE,     # duplicate core
+])
+def test_bad_core_lines(bad):
+    with pytest.raises(VerifyError) as ei:
+        parse_submission(monomino_hc1() + bad)
+    assert ei.value.code is ErrorCode.PARSE_SYNTAX

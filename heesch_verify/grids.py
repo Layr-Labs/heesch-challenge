@@ -3,7 +3,7 @@
 All neighbor tables and orientation lists are transcribed verbatim from
 Kaplan's heesch-sat (src/ominogrid.h, hexgrid.h, iamondgrid.h) — see
 tools/NOTES-kaplan.md for provenance. Do not edit them; they are frozen
-conventions (spec §11) and changing any is a new epoch.
+conventions (spec §11) and changing any is a new revision.
 
 The `Contact` relation object is constructed once per verification run and
 threaded as a parameter into every corona-related function (spec §11.1).

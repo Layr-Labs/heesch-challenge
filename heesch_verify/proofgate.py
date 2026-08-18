@@ -12,10 +12,13 @@ hh = m-1 the value is exact (multilevel spec §2.2). This module turns the
                        contradiction — never scored, never "fixed up")
   2. checker preflight all three vendored checkers present, else
                        CHECKER_UNAVAILABLE (fail closed; never a downgrade)
-  3. bands             harness band and epoch-2 band, else RESOURCE_EXCEEDED
+  3. bands             harness band and the encoder feasibility band, else RESOURCE_EXCEEDED
   4. proof file        regular file inside submission/, size caps, optional
                        xz with bounded decompression, sha256 verified before
-                       any checker sees a byte
+                       any checker sees a byte (same for the optional core
+                       clause list — the subset of F an LRAT proof refutes;
+                       heesch_encoder.proofcheck.core checks every clause is
+                       a clause of the regenerated F, exactly)
   5. check_proof_v2    regenerate F(S, m), digest/header match, sniff, then
                        RECORD tier: two independent VERIFIED verdicts, one of
                        them cake_lpr (formally verified)
@@ -40,21 +43,22 @@ from .result import ErrorCode
 
 # On-disk cap for the proof file as submitted (plain or .xz) and the cap on
 # the decompressed payload the checkers read. Coupled to benchmark.json's
-# maxSubmissionBytes (64 MiB): best.heesch (<= 2 MiB) + proof must fit.
+# maxSubmissionBytes (128 MiB): best.heesch (<= 2 MiB) + proof + core must fit.
 PROOF_MAX_STORED_BYTES = 48 * 1024 * 1024
-PROOF_MAX_PAYLOAD_BYTES = 256 * 1024 * 1024
+# A record-scale LRAT (F(S,6) of an 11-cell shape) is ~513 MB raw / 25 MB xz;
+# the payload lands in scratch on disk, never in memory.
+PROOF_MAX_PAYLOAD_BYTES = 1024 * 1024 * 1024
 _XZ_MEMLIMIT = 256 * 1024 * 1024
 _CHUNK = 1024 * 1024
 
-# In-harness proof band (cells, max m): the epoch-2 band minus its two
-# heaviest cells ((50, 4) and (200, 2)), because the harness must ENCODE
-# F(S, m) inside the benchmark job as well as check it. (<= 20, 5) admits
-# the exactness proof of every known Hc = 4 shape (11-20 cells): F(S,5)
-# encodes in ~1 min (11-hex, 1.0 GB DIMACS) to ~3 min (20-iamond, 2.1 GB).
-# A record claim hc >= 5 needs F(S,6), outside the epoch-2 band — see
-# docs/heesch-multilevel-encoder-spec.md §10.2. Measured in
-# docs/ml-feasibility.md.
-HARNESS_PROOF_BAND = ((20, 5), (50, 3), (100, 2))
+# In-harness proof band (cells, max m): the encoder's feasibility band minus
+# its two heaviest cells ((50, 4) and (200, 2)), because the harness must
+# ENCODE F(S, m) inside the benchmark job as well as check it. (<= 20, 5)
+# admits the exactness proof of every known Hc = 4 shape (11-20 cells);
+# (<= 12, 6) admits an Hc = 5 certificate for a shape up to 12 cells
+# (measured: F(S,6) of the 11-hex — 112 s encode at 2.5 GB RSS, drat-trim
+# 61 s, lrat-check 16 s on the 513 MB LRAT). See docs/ml-feasibility.md.
+HARNESS_PROOF_BAND = ((12, 6), (20, 5), (50, 3), (100, 2))
 # Wall-clock guard around the encoding step (the checkers have their own
 # CheckBudget); exceeding it is RESOURCE_EXCEEDED, never a crash.
 ENCODE_TIMEOUT_S = 600
@@ -80,6 +84,7 @@ class ProofVerdict:
     checkers_verified: tuple = ()
     hh_exact: bool = False
     exact: bool = False
+    core_clauses: int = 0
 
     def to_json(self) -> dict:
         return {
@@ -92,6 +97,7 @@ class ProofVerdict:
             "checkers_verified": list(self.checkers_verified),
             "hh_exact": self.hh_exact,
             "exact": self.exact,
+            "core_clauses": self.core_clauses,
         }
 
 
@@ -291,11 +297,26 @@ class ProofCarryingGate:
                 ProofStatus, ProofSubmission, Tier, check_proof_v2,
             )
 
+            core_dst = None
+            if block.core_file is not None:
+                core_src = self.submission_dir / block.core_file
+                core_dst = scratch / "core.txt"
+                try:
+                    _, core_sha = materialize_proof(core_src, core_dst, block.core_compression)
+                except ProofFileError as e:
+                    return ProofVerdict(e.code, "core: " + e.message, m=m)
+                if core_sha != block.core_sha256:
+                    return ProofVerdict(
+                        ErrorCode.PROOF_FILE_DIGEST_MISMATCH,
+                        f"core payload sha256 {core_sha[:16]}… != declared {block.core_sha256[:16]}…",
+                        m=m,
+                    )
             psub = ProofSubmission(
                 proof_path=str(dst),
                 claimed_cnf_digest=block.cnf_digest,
                 claimed_vars=block.num_vars,
                 claimed_clauses=block.num_clauses,
+                claimed_core_clauses=block.core_clauses,
             )
             tile = frozenset(canonical_form(sub.cells, sub.grid, True))
             try:
@@ -303,6 +324,7 @@ class ProofCarryingGate:
                     out = check_proof_v2(
                         psub, tile, sub.grid, outcome.contact, m,
                         tier=Tier.RECORD, bin_dir=self.checker_dir, budget=self.budget,
+                        core_path=(str(core_dst) if core_dst is not None else None),
                     )
             except _EncodeTimeout:
                 return ProofVerdict(
@@ -323,5 +345,5 @@ class ProofCarryingGate:
         return ProofVerdict(
             None, out.detail, m=m, cnf_digest=out.cnf_digest,
             proof_sha256=payload_sha, fmt=block.fmt, checkers_verified=verified,
-            hh_exact=hh_exact, exact=exact,
+            hh_exact=hh_exact, exact=exact, core_clauses=out.core_clauses,
         )

@@ -76,7 +76,7 @@ def test_v2_digests_stable_across_hash_seeds(name, gid, cells, m):
     if name in goldens:
         assert [uni_d, cnf_d] == goldens[name], (
             f"{name}: digest drifted from committed golden — any v2 schema "
-            "change is a new epoch"
+            "change is a new revision"
         )
     else:
         goldens[name] = [uni_d, cnf_d]

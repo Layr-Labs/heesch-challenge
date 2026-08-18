@@ -55,13 +55,17 @@ Then, unless the shape is inside the census, produce the non-tiler proof:
 ```bash
 pip install -e '.[prove]'            # python-sat (CaDiCaL); the harness never needs it
 bash tools/build_checkers.sh         # drat-trim / lrat-check (+ cake_lpr on x86-64 Linux)
-python tools/prove.py submission/best.heesch --xz --check
+python tools/prove.py submission/best.heesch --check
 ```
 
 `prove.py` encodes `F(S, m)` for `m = hh + 1` with the same encoder the
-harness uses, solves it with proof logging, writes `submission/proof.drat.xz`
-and the `#PROOF` block, and `--check` runs the harness's own gate on the
-result. If `F(S, m)` is SAT the shape may have a deeper corona than your
+harness uses (streamed to disk), solves it in a worker process with proof
+logging (trying several solvers until drat-trim verifies the DRAT), and writes
+`submission/proof.lrat.xz` (the trimmed LRAT, ids relative to the core) plus
+`submission/core.txt.xz` (the few percent of the formula's clauses the proof
+actually uses — the harness checks each one is a clause of its own
+regenerated formula and hands the checkers only those) and the `#PROOF`
+block; `--check` runs the harness's own gate on the result. If `F(S, m)` is SAT the shape may have a deeper corona than your
 witness shows (raise the witness, or `--m` higher) — or it tiles.
 
 ## File format (heesch-sat, adopted verbatim)
@@ -138,11 +142,15 @@ search loop; they are API (`docs/heesch-verifier-architecture.md` §8).
   formally-verified `cake_lpr` (DRAT: `drat-trim` → `cake_lpr`; LRAT:
   `cake_lpr` → `lrat-check`). `m` must be `≥ hh + 1`
   (`PROOF_LEVEL_INCONSISTENT`); the size must be inside the in-harness band
-  (≤ 20 cells `m ≤ 5`, ≤ 50 `m ≤ 3`, ≤ 100 `m ≤ 2`, else `RESOURCE_EXCEEDED`
-  — every known Hc = 4 shape's exactness proof `F(S,5)` fits; a claim of
-  `Hc ≥ 5` needs `F(S,6)`, which no encoder epoch supports yet, so
-  `record_eligible` cannot be reached until the band is widened — see
-  `docs/heesch-multilevel-encoder-spec.md` §10.2);
+  (≤ 12 cells `m ≤ 6`, ≤ 20 `m ≤ 5`, ≤ 50 `m ≤ 3`, ≤ 100 `m ≤ 2`, else
+  `RESOURCE_EXCEEDED` — every known Hc = 4 shape's exactness proof `F(S,5)`
+  fits; an `Hc ≥ 5` certificate `F(S,6)` is producible for shapes up to
+  12 cells (measured: ~2 min to encode, ~3 min to solve, 25 MB xz LRAT) and
+  is checked in-band because the checkers only load the proof's core clauses
+  (see `docs/heesch-verifier-architecture.md` §13.3 5b; without a core list
+  the formally-verified checker needs > 6 GB and the standard 8 GB runner
+  answers `RESOURCE_EXCEEDED`, routing the entry to the out-of-band record
+  procedure, §13.9);
   a proof block that is present but broken rejects even a census shape.
   `m = hh + 1` makes the value exact; larger `m` certifies non-tilerhood
   with the lower bound only.
@@ -181,6 +189,6 @@ This is a schema v1 (single-track) benchmark — no tracks; `yukon tracks` /
 | `tools/build_checkers.sh` | Builds the vendored proof checkers into `tools/bin` |
 | `docs/heesch-verifier-architecture.md` | The acceptance rule, pipeline, error codes, record fields |
 | `docs/heesch-cnf-encoder-spec.md`, `docs/heesch-multilevel-encoder-spec.md` | The encoders and their soundness obligations |
-| `docs/THREAT-MODEL.md`, `docs/CONVENTIONS.md`, `docs/soundness-note.md` | Threat model, frozen conventions (epoch v1), the soundness theorems |
+| `docs/THREAT-MODEL.md`, `docs/CONVENTIONS.md`, `docs/soundness-note.md` | Threat model, frozen conventions (revision v1), the soundness theorems |
 | `docs/audits/` | External audits and our responses |
 | `tests/` | Calibration, census, adversarial, metamorphic, fuzz, encoder round-trip, proof e2e suites |

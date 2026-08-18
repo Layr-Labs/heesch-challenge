@@ -4,5 +4,5 @@
 third_party/** -text
 tests/encoder/golden/** -text
 tests/corpus/** -text
-heesch_encoder/epoch/*.json -text
+heesch_encoder/revisions/*.json -text
 submission/** -text

@@ -1,4 +1,4 @@
-# heesch-encoder/v1 — CNF encoder specification (epoch 1)
+# heesch-encoder/v1 — CNF encoder specification (revision 1)
 
 The single-level encoder: for a tile `S` and a verified hole-free patch
 `P_k` (coronas `0..k`), the formula `F(S, P_k)` is satisfiable iff a
@@ -100,7 +100,7 @@ under randomized `PYTHONHASHSEED` match committed goldens.
 | E3 | every SAT model decodes to a corona the geometry verifier accepts (over-permissive detector) | `test_roundtrip.py::test_e3_*` |
 | E4 | every oracle-legal corona satisfies `F` under the canonical aux extension, checked by a pure-Python clause evaluator (over-restrictive detector — the false-record direction) | `test_roundtrip.py::test_e4_*` |
 | E5 | one contact relation: `R`/`touches` are `heesch_verify.patch`'s, same threaded object | `tests/test_contact_threading.py`, AST lint |
-| E6 | deterministic regeneration (§6) | `test_determinism.py`, `test_no_unordered_iteration.py`, `test_epoch_freeze.py` |
+| E6 | deterministic regeneration (§6) | `test_determinism.py`, `test_no_unordered_iteration.py`, `test_revision_freeze.py` |
 | E7 | `Hc <= Hh <= Hc + 1` for non-tilers | argument in `soundness-note.md`; citation status open (§14 Q2) |
 | E8 | **the per-patch quantifier gap** — UNSAT of `F(S, P_k)` proves only that THIS `P_k` has no corona `k+1`; sound for `Hh <= k` only at `k = 0` | resolved by encoder v2 |
 
@@ -123,7 +123,7 @@ proof handling (`test_proof_pipeline.py`: digest/header mismatch, SAT model,
 empty, truncated, oversized, tier arity, format table, real drat-trim positive
 control); 9.6 E6 determinism goldens; 9.7 (v2) determinism; 9.8 (v2)
 record-tier proof artifact positive control. The proof-carrying gate is
-enabled (architecture §2.2) because these suites are green; the epoch's
+enabled (architecture §2.2) because these suites are green; the revision's
 external review status is tracked in `soundness-note.md` and gates *record
 announcements* (architecture §13.9), not scoring.
 
@@ -132,21 +132,30 @@ announcements* (architecture §13.9), not scoring.
 Single-level formulas are small (tens of thousands of variables for corpus
 shapes). v2's band is the operative limit (multilevel spec §10.2).
 
-## 11. Epoch freeze
+## 11. Revision freeze
 
-`heesch_encoder/epoch/epoch-1.json` records the frozen constants
+`heesch_encoder/revisions/rev-1.json` records the frozen constants
 (`manifest.live_constants()`: AMO threshold, placement/cell/literal order,
 clause emission, DIMACS profile, digest algorithm, contact relation, point
-groups) and their digest; `tests/encoder/test_epoch_freeze.py` asserts the
+groups) and their digest; `tests/encoder/test_revision_freeze.py` asserts the
 live code matches the manifest and pins the manifest's own sha256. Any change
 to universe, ordering, clause schema, emission or contact is a new encoder
-version and a new epoch: historical proofs stay valid against their recorded
+version and a new revision: historical proofs stay valid against their recorded
 version, are never re-checked against a new encoder, never silently
 migrated; bug fixes are not exempt. The manifest's `checkers.record_tier_policy`
 string (`cake_lpr-or-lrat-check`) predates audit F2 and is documentary only:
 the enforced policy is the code's (§8 step 6, architecture §13.4) — `cake_lpr`
 required, `lrat-check` never a substitute. The manifest is left byte-identical
 because it is immutable by construction; this note is the correction.
+
+Naming note (2026-08-18): the frozen-constants versions were previously
+called "epochs" (`heesch_encoder/epoch/epoch-N.json`, manifest key `epoch`).
+That word collides with Epoch AI, whose FrontierMath Heesch challenge this
+benchmark cross-submits to (`--emit-epoch`), so the concept is now
+"revision" (`heesch_encoder/revisions/rev-N.json`, key `revision`). The
+rename changed only the file names and that one key; the frozen constants,
+their digests and every historical proof are unchanged. The manifest sha256
+pins were re-recorded for the renamed key.
 
 ## 12. Determinism and hygiene
 

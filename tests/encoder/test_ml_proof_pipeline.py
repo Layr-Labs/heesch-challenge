@@ -104,7 +104,7 @@ def test_v2_real_unsat_proof_verifies(tmp_path):
 
 
 def test_v2_out_of_band_rejects_before_encoding(tmp_path, monkeypatch):
-    """Epoch-2 feasibility band (multilevel spec §10.2) is enforced by
+    """Revision-2 feasibility band (multilevel spec §10.2) is enforced by
     policy BEFORE any encoding work starts."""
     import heesch_encoder.multilevel.api as mlapi
 

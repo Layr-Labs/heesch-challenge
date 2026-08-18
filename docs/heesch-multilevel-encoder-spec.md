@@ -1,4 +1,4 @@
-# heesch-encoder/v2 — multilevel encoder specification (epoch 2)
+# heesch-encoder/v2 — multilevel encoder specification (revision 2)
 
 One formula `F(S, m)` per (tile, level count), quantifying over **all**
 patches at once. Its UNSAT is the only proof object the harness accepts for
@@ -53,7 +53,7 @@ Combined with a verified witness (architecture §7): `Hh >= hh_verified`, so
 `m >= hh_verified + 1` is forced (`PROOF_LEVEL_INCONSISTENT` otherwise);
 with `m = hh_verified + 1`, `Hh = hh_verified` exactly, and if
 `hc_verified = hh_verified` then `Hc = Hh = k` exactly. Assumptions: the
-obligations M1–M9 (§8) hold for the frozen epoch-2 constants (§11); those
+obligations M1–M9 (§8) hold for the frozen revision-2 constants (§11); those
 are what external review (architecture §13.9) attests.
 
 SAT says nothing beyond "a weak configuration exists" — never
@@ -104,7 +104,7 @@ order (`ordering.xvar_key`), then Sinz auxiliaries. Families:
 - **7 / coverage auxiliaries — do not exist at B = 0.** `B` is the weak
   bound: extra slack that would let W4 windows widen; the calibration (§9.4)
   found `B = 0` sufficient on every measured shape, and it is frozen in
-  epoch-2.
+  revision-2.
 
 The touch graph is computed once over the union of level cellsets
 (`universe.touching_cellset_pairs`) and shared by clause construction and the
@@ -144,7 +144,7 @@ prepended). Not on the emission path.
 
 M1 and M4 are the false-record obligations: an incomplete universe or an
 over-restrictive clause would make a real corona unrepresentable and UNSAT
-meaningless. External review of this table for epoch 2 is the precondition
+meaningless. External review of this table for revision 2 is the precondition
 for record *announcements* (architecture §13.9); the gate itself is enforced
 because the tests are green and the theorem's assumptions are exactly these
 rows.
@@ -170,28 +170,38 @@ rectangle 1.45 M vars at `m = 3`, 6.7 M at `m = 5`; a 100-cell square DNF at
 `m = 5`; a 200-cell rectangle DNF at `m = 3`).
 
 ### 10.2 The band (enforced)
-epoch-2 `feasibility_band.supported`: `(<= 20 cells, m <= 5)`,
-`(<= 50, m <= 4)`, `(<= 100, m <= 3)`, `(<= 200, m <= 2)`.
+`heesch_encoder.multilevel.api.FEASIBILITY_BAND` (measured policy — it
+changes no CNF byte, so widening it is not a new revision; the revision-2
+manifest carries the 2026-08-07 measurement as history):
+`(<= 12 cells, m <= 6)`, `(<= 20, m <= 5)`, `(<= 50, m <= 4)`,
+`(<= 100, m <= 3)`, `(<= 200, m <= 2)`.
 `check_proof_v2` answers `RESOURCE_EXCEEDED` **before encoding** outside it
-(`multilevel.api.in_feasibility_band`). The harness applies the slightly stricter
-in-harness band `((20, 5), (50, 3), (100, 2))` because it must also encode
-inside the benchmark job (architecture §13.3): measured `F(S, 5)` encodings
-of the known `Hc = 4` shapes take ~1 min (11-hex, 561 k vars, 6.9 M clauses,
-1.0 GB DIMACS; UNSAT in ~30 s) to ~3 min (20-iamond, 1.27 M vars, 11.0 M
-clauses, 2.1 GB). All known `Hc = 4` shapes are 11–20 cells (Kaplan 2022:
-hexes of 11/13/15/15/16 cells, one 20-iamond), so their exactness proofs are
-inside both bands. **A hypothetical `Hc = 5` needs `F(S, 6)`, which is
-outside the epoch-2 band (max m = 5) — so `record_eligible` is currently
-unreachable by construction.** Widening to m = 6 at ≤ 20 cells is the first
-epoch-3 question (encoding size grows ~5–10× per level; F(S,6) for the
-11-hex would be ~5–10 GB of DIMACS).
+(`in_feasibility_band`), and encodes by streaming to disk
+(`encode_multilevel_stream`, byte-identical to `encode_multilevel`) so peak
+memory is the universe, not the formula. The harness applies the slightly
+stricter in-harness band `((12, 6), (20, 5), (50, 3), (100, 2))` because it
+must also encode inside the benchmark job (architecture §13.3).
 
-## 11. Frozen constants (epoch 2)
+Measured (docs/ml-feasibility.md): every known `Hc = 4` shape (11–20 cells)
+has its exactness proof `F(S, 5)` inside both bands (11-hex: 60 s encode,
+UNSAT in ~30 s; 20-iamond: 173 s encode). **An `Hc = 5` certificate is
+`F(S, 6)`**: for the 11-hex it encodes in 112 s at 2.5 GB RSS (17.2 M
+clauses, 2.1 GB DIMACS), is UNSAT in 157 s, drat-trim verifies and emits the
+LRAT in 61 s (513 MB, 25 MB xz), lrat-check verifies in 16 s. The
+formally-verified `cake_lpr` needs more than ~6 GB of heap to load that CNF:
+on the standard 8 GB GitHub runner it reports `CakeML heap space exhausted`
+after ~5 min and the harness answers `RESOURCE_EXCEEDED` (naming the checker,
+never `NOT_VERIFIED`); on a ≥ 12 GB machine it is checked in-band. Larger
+shapes at m = 6 (a 20-cell shape would be ~5× that) are the next widening
+question, and beyond what the runner can check the out-of-band record
+procedure applies (architecture §13.9).
 
-`heesch_encoder/epoch/epoch-2.json` (`manifest.live_constants_v2()`):
+## 11. Frozen constants (revision 2)
+
+`heesch_encoder/revisions/rev-2.json` (`manifest.live_constants_v2()`):
 encoder version, families active `1,2,4,5,6`, `weak_bound_B = 0`, level
 window `{l-1,l,l+1}`, universe construction `reachability-bfs/v1`, variable
 order, clause emission order, the feasibility band, and the constants digest;
-sha256-pinned by `test_epoch_freeze.py`. Any change is epoch 3. The
+sha256-pinned by `test_revision_freeze.py`. Any change is revision 3. The
 `checkers.record_tier_policy` string in the manifest is documentary and
 superseded by the enforced code policy (v1 spec §11).

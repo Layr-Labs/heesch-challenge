@@ -72,3 +72,35 @@ def test_verdict_matrix(fn, args, stdout, expect, with_binary, monkeypatch):
     result = fn(*args)
     got = result.status is ck.CheckStatus.VERIFIED
     assert got == expect, f"{fn.__name__} on {stdout!r}: {result.status}"
+
+
+def test_cake_lpr_heap_exhaustion_is_resource_not_verdict(monkeypatch, tmp_path):
+    """A checker running out of its fixed heap says nothing about the proof:
+    RESOURCE_EXCEEDED, never NOT_VERIFIED (seen on the benchmark runner for a
+    record-scale LRAT: 'CakeML heap space exhausted.')."""
+    monkeypatch.setattr(ck, "_BIN", tmp_path)
+    ck.checker_path("cake_lpr", tmp_path).write_text("")  # .exe on Windows
+    seen = {}
+
+    def run(cmd, *a, **k):
+        seen["cmd"] = cmd
+
+        class P:
+            stdout = ""
+            stderr = "CakeML heap space exhausted.\n"
+        return P()
+
+    monkeypatch.setattr(ck.subprocess, "run", run)
+    r = ck.cake_lpr("f.cnf", "p.lrat")
+    assert r.status is ck.CheckStatus.RESOURCE_EXCEEDED
+    assert "heap" in r.detail
+    # The wrapper sizes the heap explicitly instead of trusting the 4 GB default.
+    assert any(str(x).startswith("--CML_HEAP_SIZE=") for x in seen["cmd"])
+    assert any(str(x).startswith("--CML_STACK_SIZE=") for x in seen["cmd"])
+    heap = int([x for x in seen["cmd"] if str(x).startswith("--CML_HEAP_SIZE=")][0].split("=")[1])
+    assert heap >= ck.CAKE_LPR_HEAP_MB_MIN
+
+
+def test_cake_lpr_heap_override(monkeypatch):
+    monkeypatch.setenv("HEESCH_CAKE_HEAP_MB", "6000")
+    assert ck.cake_lpr_heap_mb() == 6000

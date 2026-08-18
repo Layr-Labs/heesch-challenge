@@ -67,7 +67,7 @@ def test_digest_stable_across_hash_seeds(name, gid, cells, placements):
     if name in goldens:
         assert digest == goldens[name], (
             f"{name}: digest drifted from committed golden — any change to "
-            "ordering, clause schema or emission is a new epoch"
+            "ordering, clause schema or emission is a new revision"
         )
     else:
         # First run records the golden; commit the file.

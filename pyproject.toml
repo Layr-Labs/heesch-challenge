@@ -34,7 +34,7 @@ packages = [
 ]
 
 [tool.setuptools.package-data]
-heesch_encoder = ["epoch/*.json"]
+heesch_encoder = ["revisions/*.json"]
 heesch_verify = ["known_nontilers.json"]
 
 [tool.pytest.ini_options]

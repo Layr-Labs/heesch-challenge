@@ -12,7 +12,7 @@ specified in `heesch-cnf-encoder-spec.md` §7 (E1–E8) and
 
 **Status.** Encoder v2 is the enforced acceptance path (architecture §2.2/§13):
 its obligation suites are green and its theorem is stated below. What
-remains open is *external review* of the M1–M9 arguments for epoch 2 and a
+remains open is *external review* of the M1–M9 arguments for revision 2 and a
 citable proof of E7; both gate record *announcements* (architecture §13.9),
 not scoring. Encoder v1 is not used for acceptance.
 
@@ -130,7 +130,7 @@ records `hh_exact`/`exact` from the level rule alone.
 ## E8 — the per-patch quantifier gap (v1)
 
 Stated under Theorem v1. Resolution: encoder v2 (built 2026-08-07, all
-M-suites green, feasibility band measured and frozen in epoch 2, and — since
+M-suites green, feasibility band measured and frozen in revision 2, and — since
 2026-08 — the enforced acceptance path with a submission channel,
 `ProofCarryingGate`, checker build in `setup.sh` and `tools/prove.py`).
 
@@ -142,9 +142,9 @@ covered by its proof.
 
 ## Frozen constants
 
-`heesch_encoder/epoch/epoch-1.json`, `epoch-2.json`. Any change to the
+`heesch_encoder/revisions/rev-1.json`, `rev-2.json`. Any change to the
 placement universe, variable ordering, clause schema, emission order,
-contact relation, AMO threshold, level window or weak bound is a new epoch:
+contact relation, AMO threshold, level window or weak bound is a new revision:
 historical proofs stay valid against their recorded version, never re-checked
 against a new encoder, never silently migrated. Bug fixes are not exempt.
 

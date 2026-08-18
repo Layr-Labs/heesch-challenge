@@ -59,11 +59,11 @@ and the proof path **enforced**:
 ### Critical 2 — the advertised record-tier proof gate is not operational — CLOSED
 - **Was:** `ProofCarryingGate.ENABLED = False`, `check` raised, harness never
   called it, no proof field in the grammar, no proof step in the workflow.
-- **Now:** `heesch_verify/parse.py` — `#PROOF` block (schema, encoder/epoch,
+- **Now:** `heesch_verify/parse.py` — `#PROOF` block (schema, encoder/revision,
   m, CNF digest + header, proof file basename/format/compression/payload
   sha256), must be last, exact marker; `heesch_verify/proofgate.py` —
   `ProofCarryingGate.check`: level rule `m ≥ hh + 1`, checker preflight,
-  in-harness + epoch-2 bands, hardened proof-file materialisation (regular
+  in-harness + revision-2 bands, hardened proof-file materialisation (regular
   file, `O_NOFOLLOW`, size caps, bounded xz), sha256 check, then
   `check_proof_v2` at RECORD tier (two VERIFIED, one `cake_lpr`); mapped 1:1
   to stable codes. `harness/verify.py` calls it (Stage 6). `setup.sh` builds
@@ -110,7 +110,7 @@ and the proof path **enforced**:
   conventions, §12 suites, §13 proof pipeline, §14 bounds, §15 open
   questions), `docs/heesch-cnf-encoder-spec.md` (v1: §3 universe, §4 clauses,
   §5–§6 checker semantics and DIMACS, §7 E1–E8, §8 order of operations, §9
-  suites, §11 epoch freeze, §14 Q2), `docs/heesch-multilevel-encoder-spec.md`
+  suites, §11 revision freeze, §14 Q2), `docs/heesch-multilevel-encoder-spec.md`
   (v2: §2.2 theorem, §4.2 universes, §5 families, §6 order, §7 model
   self-check, §8 M1–M9 defined, §9 suites, §10.2 band — now enforced, §11
   constants), `docs/THREAT-MODEL.md` (TB1–TB5, C1–C9, A-1–A-4, R1–R5). Every
@@ -160,16 +160,20 @@ census — heesch-sat's own output — is the calibration anchor.
 
 ## What is honestly still open
 
-- External review of the epoch-2 obligations (M1–M9) and a citable proof of
+- External review of the revision-2 obligations (M1–M9) and a citable proof of
   E7 gate record *announcements*, not scoring (architecture §13.9).
-- Proof feasibility: the enforced in-harness band is ≤ 20 cells m ≤ 5,
-  ≤ 50 m ≤ 3, ≤ 100 m ≤ 2 (epoch-2 band adds (50, 4) and (200, 2)). Every
-  known Hc = 4 shape's exactness proof `F(S,5)` fits (measured: 11-hex 60 s
-  encode / 26 s UNSAT; 20-iamond 173 s encode). **A claim of Hc ≥ 5 needs
-  `F(S,6)`, outside the epoch-2 band, so `record_eligible` is unreachable
-  until an epoch-3 band widening** — the benchmark can certify every value
-  achieved so far, not yet the value that would be a new record. Stated
-  plainly in README and the multilevel spec §10.2.
+- Proof feasibility: the enforced in-harness band is ≤ 12 cells m ≤ 6,
+  ≤ 20 m ≤ 5, ≤ 50 m ≤ 3, ≤ 100 m ≤ 2 (the encoder band adds (50, 4) and
+  (200, 2)). Every known Hc = 4 shape's exactness proof `F(S,5)` fits
+  (measured: 11-hex 60 s encode / 26 s UNSAT; 20-iamond 173 s encode), and
+  an Hc = 5 certificate `F(S,6)` fits for shapes up to 12 cells (11-hex:
+  112 s encode at 2.5 GB with the streamed encoder, UNSAT in 157 s, LRAT
+  513 MB / 25 MB xz, checked in ~80 s by drat-trim + lrat-check). The
+  formally-verified `cake_lpr` needs > 6 GB of heap for that CNF, so on the
+  standard 8 GB GitHub runner the record-depth check answers
+  `RESOURCE_EXCEEDED` (measured) and the submission goes through the
+  out-of-band record procedure (architecture §13.9); on a ≥ 12 GB runner it
+  is checked in-band. Stated plainly in README and the multilevel spec §10.2.
 - Census evidence is a trusted published computation, not a proof
   certificate; replacing it with maintainer-generated checked proofs for the
   small shapes is listed as future work (architecture §15, threat model R1).

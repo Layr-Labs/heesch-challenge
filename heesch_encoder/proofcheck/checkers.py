@@ -33,9 +33,9 @@ class CheckBudget:
     overall deadline. Every spawn gets min(cap, time left); a non-positive
     remainder is RESOURCE_EXCEEDED without spawning."""
 
-    DEFAULT_CAPS = {"drat-trim": 540.0, "cake_lpr": 420.0, "lrat-check": 180.0}
+    DEFAULT_CAPS = {"drat-trim": 600.0, "cake_lpr": 900.0, "lrat-check": 300.0}
 
-    def __init__(self, per_checker: dict | None = None, deadline_seconds: float = 1200.0):
+    def __init__(self, per_checker: dict | None = None, deadline_seconds: float = 1500.0):
         import time
 
         self.caps = dict(self.DEFAULT_CAPS)
@@ -86,6 +86,37 @@ _SUCCESS = {
 }
 
 
+# cake_lpr is a CakeML binary with a FIXED heap and stack reserved at start
+# (wrapper flags --CML_HEAP_SIZE=<MB> / --CML_STACK_SIZE=<MB>, defaults 4096).
+# The default heap is too small for record-scale instances (a 13 M-clause
+# CNF + 500 MB LRAT reported "CakeML heap space exhausted" on the benchmark
+# runner), so the wrapper sizes the heap from the machine's available memory
+# (70 % of MemAvailable, capped) unless HEESCH_CAKE_HEAP_MB is set. Exhausting
+# it is a RESOURCE outcome, never a verdict on the proof.
+CAKE_LPR_HEAP_MB_MAX = 12288
+CAKE_LPR_HEAP_MB_MIN = 1024
+CAKE_LPR_STACK_MB = 1024
+_CAKE_RESOURCE_MARKERS = ("heap space exhausted", "stack space exhausted")
+
+
+def cake_lpr_heap_mb() -> int:
+    override = os.environ.get("HEESCH_CAKE_HEAP_MB")
+    if override:
+        return max(CAKE_LPR_HEAP_MB_MIN, int(override))
+    avail_mb = None
+    try:
+        with open("/proc/meminfo") as fh:
+            for line in fh:
+                if line.startswith("MemAvailable:"):
+                    avail_mb = int(line.split()[1]) // 1024
+                    break
+    except OSError:
+        pass
+    if avail_mb is None:
+        return 4096
+    return max(CAKE_LPR_HEAP_MB_MIN, min(CAKE_LPR_HEAP_MB_MAX, int(avail_mb * 0.85)))
+
+
 def _run(name: str, args: list[str], timeout: float, bin_dir=None,
          budget: CheckBudget | None = None) -> CheckResult:
     exe = checker_path(name, bin_dir)
@@ -99,10 +130,14 @@ def _run(name: str, args: list[str], timeout: float, bin_dir=None,
     if timeout <= 0:
         return CheckResult(name, CheckStatus.RESOURCE_EXCEEDED, 0.0,
                            "proof-check deadline exhausted before spawn")
+    argv = [str(exe)]
+    if name == "cake_lpr":
+        argv += [f"--CML_HEAP_SIZE={cake_lpr_heap_mb()}", f"--CML_STACK_SIZE={CAKE_LPR_STACK_MB}"]
+    argv += args
     t0 = time.time()
     try:
         proc = subprocess.run(
-            [str(exe), *args],
+            argv,
             capture_output=True,
             text=True,
             # F4: hostile proof bytes echoed by the checker must not crash the
@@ -122,6 +157,9 @@ def _run(name: str, args: list[str], timeout: float, bin_dir=None,
     out = proc.stdout + "\n" + proc.stderr
     if _verdict(out, _SUCCESS[name]):
         return CheckResult(name, CheckStatus.VERIFIED, dt)
+    low = out.lower()
+    if name == "cake_lpr" and any(mk in low for mk in _CAKE_RESOURCE_MARKERS):
+        return CheckResult(name, CheckStatus.RESOURCE_EXCEEDED, dt, out[-300:].strip())
     return CheckResult(name, CheckStatus.NOT_VERIFIED, dt, out[-500:])
 
 

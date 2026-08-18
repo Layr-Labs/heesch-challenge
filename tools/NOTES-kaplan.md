@@ -117,7 +117,7 @@ N                              # patch size (placement count)
   directly by flood fill — no pairwise approximation needed.
 - `surroundable_ = false` when some halo cell admits no legal placement ⇒ Hc=0
   immediately (mirrors our "empty coverage clause" case, encoder spec §4.3).
-- Default corona search cap in `sat` tool: `-maxlevel` 7 (Epoch uses 12).
+- Default corona search cap in `sat` tool: `-maxlevel` 7 (Revision uses 12).
 
 ## Data / fixtures
 

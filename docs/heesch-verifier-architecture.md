@@ -147,6 +147,7 @@ k+1 <a,b,c,d,e,f>
 encoder heesch-encoder/v2 2 <m>
 cnf <cnf_sha256> <num_vars> <num_clauses>
 file <basename> <drat|lrat> <none|xz> <payload_sha256>
+core <basename> <none|xz> <payload_sha256> <num_clauses>   # optional, lrat only (§13.3 5b)
 ```
 
 Rules: CRLF and repeated spaces tolerated; markers are exact first tokens
@@ -286,7 +287,7 @@ constructive criteria.
 `CONVENTIONS.md` is normative: contact relation (boundary point), reflections
 allowed, hole rules, tile is a disk, central transform need not be identity,
 span/cell/placement/level caps, grid encodings. Every convention is written
-into each record (`conventions`); changing any is a new epoch.
+into each record (`conventions`); changing any is a new revision.
 
 ### 11.1 One contact relation
 `R` and `touches` are computed by `heesch_verify.patch.required_set /
@@ -315,7 +316,7 @@ symmetry/translation/line order); 12.4 differential
 
 ### 13.1 Overview
 The only accepted proof object is an UNSAT proof (DRAT or LRAT) of the
-multilevel formula `F(S, m)` produced by the frozen encoder v2 (epoch 2). The
+multilevel formula `F(S, m)` produced by the frozen encoder v2 (revision 2). The
 server regenerates `F(S, m)` from the shape line alone — the participant's
 CNF is never read — matches its digest and header, then runs the checkers.
 Encoder v1's per-patch formula `F(S, P_k)` is not accepted for acceptance
@@ -329,7 +330,12 @@ sha256 and header counts; the proof file's basename
 compression, never `best.heesch`), format `drat|lrat`, compression
 `none|xz`, and the sha256 of the *decompressed* payload. The CNF is encoded
 from the tile's canonical form (`canonical.canonical_form(cells, grid, True)`)
-by both `tools/prove.py` and the harness — that is the digest contract.
+by both `tools/prove.py` and the harness — that is the digest contract. An
+optional `core` line names a clause list — the subset of `F(S, m)` the LRAT
+proof refutes, one clause per line, its ids in the LRAT being positions in
+that list — so the checkers load only the clauses the proof uses (measured
+3.5–12 % of F); this is what makes record-scale proofs checkable in-band
+(§13.3 step 5b). `tools/prove.py` produces it by default.
 
 ### 13.3 Order of operations (`ProofCarryingGate.check`, then `check_proof_v2`)
 1. Level rule: `m >= hh_verified + 1`, else `PROOF_LEVEL_INCONSISTENT`
@@ -337,8 +343,9 @@ by both `tools/prove.py` and the harness — that is the digest contract.
    "corrected").
 2. Checker preflight: `drat-trim`, `lrat-check`, `cake_lpr` all present as
    regular files in the checker directory, else `CHECKER_UNAVAILABLE`.
-3. Bands: in-harness band `HARNESS_PROOF_BAND = ((20,5),(50,3),(100,2))`
-   (cells, max m) and the epoch-2 feasibility band, else `RESOURCE_EXCEEDED`
+3. Bands: in-harness band `HARNESS_PROOF_BAND = ((12,6),(20,5),(50,3),(100,2))`
+   (cells, max m) and the encoder feasibility band
+   (`multilevel.api.FEASIBILITY_BAND`, measured policy), else `RESOURCE_EXCEEDED`
    before any encoding; the encoding step is additionally wall-clock guarded
    (600 s → `RESOURCE_EXCEEDED`).
 4. Proof file: `lstat`/`open(O_NOFOLLOW)`/`fstat` regular-file discipline,
@@ -346,10 +353,24 @@ by both `tools/prove.py` and the harness — that is the digest contract.
    name, xz decompressed with `lzma` (memlimit 256 MiB, decompressed cap
    256 MiB, no trailing data), sha256 compared with the block
    (`PROOF_FILE_INVALID`, `RESOURCE_EXCEEDED`, `PROOF_FILE_DIGEST_MISMATCH`).
-5. Regenerate `F(S, m)`; digest match (`PROOF_CNF_DIGEST_MISMATCH`), header
-   match (`PROOF_HEADER_MISMATCH`), argv guard, size gate, format sniff on
-   bounded windows (`GATE_PROOF_INVALID` for SAT models/empty/unknown,
-   `PROOF_TRUNCATED`), then checkers.
+5. Regenerate `F(S, m)` (streamed to scratch); digest match
+   (`PROOF_CNF_DIGEST_MISMATCH`), header match (`PROOF_HEADER_MISMATCH`), argv
+   guard, size gate, format sniff on bounded windows (`GATE_PROOF_INVALID` for
+   SAT models/empty/unknown, `PROOF_TRUNCATED`), then checkers.
+   5b. **Core subset** (`heesch_encoder/proofcheck/core.py`, LRAT only, when a
+   `core` line is present): the submitted clause list is parsed with a strict
+   grammar (one clause per line, integers, `0`-terminated, no comments/headers,
+   no tautologies), each clause canonicalised (duplicate literals removed,
+   encoder literal order — the order F is emitted in), and **every clause must
+   be, by exact string equality against F's own streamed DIMACS lines, a
+   clause of F**; the checkers then run on a core CNF *we* write from F's own
+   lines in the submitter's order under a header naming F's variable count.
+   Soundness: a refutation of a subset of F refutes F (every model of F
+   satisfies the subset), for RUP and RAT steps alike; the only trust added is
+   the exact-membership check, the same class as the digest/header match. Any
+   missing clause, count mismatch or grammar deviation rejects
+   (`GATE_PROOF_INVALID` / `PROOF_HEADER_MISMATCH`) before a checker runs;
+   caps (`CORE_MAX_CLAUSES`, `CORE_MAX_BYTES`) bound the work.
 6. Verdict mapping is 1:1 from `ProofStatus` to §8 codes; `VERIFIED` yields
    the §9.3 fields.
 
@@ -365,8 +386,8 @@ is `CHECKER_UNAVAILABLE`, never a downgrade. Triage tier (one checker) exists
 for library/tests only.
 
 ### 13.5 Budgets
-`checkers.CheckBudget`: per-checker caps drat-trim 540 s, cake_lpr 420 s,
-lrat-check 180 s, overall deadline 1200 s; each spawn gets
+`checkers.CheckBudget`: per-checker caps drat-trim 600 s, cake_lpr 900 s,
+lrat-check 300 s, overall deadline 1500 s; each spawn gets
 `min(cap, deadline - now)`; a non-positive remainder is `RESOURCE_EXCEEDED`
 without spawning. Together with the witness stage and the encoding this fits
 the 30-minute benchmark job.
@@ -390,13 +411,41 @@ The checkers run inside the same bubblewrap/`sandbox-exec` confinement as the
 parser: read-only repo bind, writable scratch only (`TMPDIR`), no network, no
 capabilities. They read two path arguments and stdin is `/dev/null`.
 
-### 13.9 Review requirement
+### 13.9 Record procedure (in-band and out-of-band)
+
 A `record_eligible` entry (exact, proof-backed, `hc_verified >= 5`) is a
-machine-checked research claim. Before it is announced as a class record, the
-maintainers (i) re-run the proof check out of band, (ii) confirm the encoder
-epoch's soundness obligations (multilevel spec M1–M9, `soundness-note.md`)
-have been externally reviewed for that epoch, and (iii) publish the shape,
-witness, proof and digests. None of this alters the score.
+machine-checked research claim. Two ways it can arise:
+
+**In-band.** The submission carries the `F(S, k+1)` proof and the harness
+verifies it inside the benchmark job (bands in §13.3: an `Hc = 5` certificate
+for shapes up to 12 cells is producible and inside the band, but checking it
+needs a runner with ≥ 12 GB RAM for `cake_lpr`'s heap — the standard 8 GB
+runner answers `RESOURCE_EXCEEDED`; `docs/ml-feasibility.md`). The score is
+recorded like any other; the `record_eligible` flag is set from the metrics.
+
+**Out-of-band.** A witness whose shape or depth is outside the in-harness
+band cannot score by itself (fail closed: `RESOURCE_EXCEEDED` for the proof,
+or `GATE_INCONCLUSIVE` without one). The participant should still submit it,
+with `hc_verified` as deep as they can prove, and file the proof (or the
+request to produce one) with the maintainers, who:
+
+1. regenerate `F(S, m)` with the frozen encoder revision named in the
+   `#PROOF` block, on a machine without the job's memory/time caps
+   (`encode_multilevel_stream`, then `check_proof_v2` at record tier with the
+   real `cake_lpr`; the exact same code path, only the caps differ);
+2. record the outcome — CNF digest, proof sha256, checker verdicts and
+   versions — in `docs/records/` next to the shape and witness, and, if
+   VERIFIED, promote the entry with `non_tiler_evidence=proof` by re-running
+   the harness with the widened band pinned for that submission (the score
+   itself is the ordinary `hc_verified + defect` scalar);
+3. widen the in-band limits for everyone once the measurement shows the new
+   size/depth fits the job (a policy change, not a new encoder revision).
+
+Before **announcing** any record, in-band or out, the maintainers (i)
+re-run the proof check out of band, (ii) confirm the encoder revision's
+soundness obligations (multilevel spec M1–M9, `soundness-note.md`) have been
+externally reviewed for that revision, and (iii) publish the shape, witness,
+proof and digests. None of this alters the score.
 
 ## 14. Resource bounds
 
@@ -405,7 +454,7 @@ Shape ≤ 200 cells, `span_x + span_y <= 29`; ≤ 20 000 placements per patch;
 ≤ 2 MiB, proof file ≤ 48 MiB stored / 256 MiB decompressed; boundary-word
 caps 410 (square) / 810 (hex, iamond) edges — above the longest legal
 boundary; checker budgets §13.5; benchmark job 30 min. Bounds are not frozen
-conventions: raising one is not a new epoch, but every accepted result stays
+conventions: raising one is not a new revision, but every accepted result stays
 valid.
 
 ## 15. Open questions
@@ -414,8 +463,8 @@ Recorded, not hidden: (1) the 6-hex divergence (§6); (2) whether the
 Hh board should be its own track; (3) whether defect-board ranking should be
 enabled on the public board (`defect_board_enabled=False` today; the fields
 are always recorded); (4) proof feasibility above ~50 cells / m > 2 — the
-enforced band is the measured one, and widening it is an epoch-2 constants
-question, not a policy question; (5) replacing census evidence with
+enforced band is the measured one and is widened as measurements allow — a
+policy change, not a new encoder revision; (5) replacing census evidence with
 maintainer-generated checked proofs for the small shapes (feasible: F(S,2)/
 F(S,3) at ≤ 12 cells solve in seconds), so that every scored entry is
 proof-backed rather than census-backed.
