@@ -1,6 +1,6 @@
 """Frozen canonical orders (spec §3.3, §6). Every comparison that can reach
 emitted bytes routes through these functions; nothing else in the package may
-invent a sort key. Changing any order is a new epoch and invalidates every
+invent a sort key. Changing any order is a new revision and invalidates every
 historical proof."""
 
 from __future__ import annotations
@@ -33,6 +33,6 @@ def literal_key(lit: int) -> tuple:
 
 def xvar_key(level: int, p) -> tuple:
     """v2 (multilevel spec §5, emission §6): level-major x-variable order —
-    (l, symmetry_index, ty, tx). Additive to the v1 orders; epoch-1 is
+    (l, symmetry_index, ty, tx). Additive to the v1 orders; revision-1 is
     untouched."""
     return (level,) + placement_key(p)

@@ -12,6 +12,6 @@ from .patch import CoronaResult, check_corona, contact_neighbors, required_set, 
 from .result import ErrorCode, Result, Status, VerifyError
 from .shape import check_shape, connected, holes_of, is_hole_free
 from .transform import Xform, check_symmetry
-from .witness import CONVENTIONS_EPOCH, VerifyConfig, WitnessOutcome, verify_witness
+from .witness import CONVENTIONS_REVISION, VerifyConfig, WitnessOutcome, verify_witness
 
 __version__ = "1.0.0.dev0"

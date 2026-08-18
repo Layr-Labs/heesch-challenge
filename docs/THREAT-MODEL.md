@@ -10,7 +10,7 @@ R3) and from `heesch-verifier-architecture.md` §3/§13.8.
 - **A1 — board integrity**: no entry scores more than its geometry proves; no
   plane tiler holds a place; a "record" is a proven, exact, non-tiler value.
 - **A2 — determinism/reproducibility**: the same bytes always yield the same
-  verdict, on any host, forever (epochs).
+  verdict, on any host, forever (revisions).
 - **A3 — confidentiality of the runner**: a submission cannot read or
   exfiltrate host files or secrets through the harness or its logs.
 - **A4 — availability/cost**: a submission cannot burn unbounded runner time
@@ -36,7 +36,7 @@ separately by SHA-pinned actions, hash-pinned vendored sources, and
 | TB2 | verified geometry → score (`harness/verify.py`) | fail-closed rule (architecture §2.2) |
 | TB3 | proof bytes → vendored checkers (`proofcheck`) | digests first, size/format gates, sandbox, budgets |
 | TB4 | the shape file as a *file* (regular vs symlink/device) | `O_NOFOLLOW`, `S_ISREG`, bounded read |
-| TB5 | our own encoder as the trust root of every proof (`heesch_encoder`) | frozen epochs, obligations E1–E8 / M1–M9, external review before record announcements |
+| TB5 | our own encoder as the trust root of every proof (`heesch_encoder`) | frozen revisions, obligations E1–E8 / M1–M9, external review before record announcements |
 
 ## 4. Controls
 
@@ -62,7 +62,7 @@ separately by SHA-pinned actions, hash-pinned vendored sources, and
   before any fallible work and copied out of scratch only after success; the
   scalar is never a Heesch number; exact fractions; no timings in outputs.
 - **C6 — determinism** (A2): canonical ordering everywhere, `python -I`, hash
-  seed pinned, epoch manifests immutable and pinned, encoder AST lint.
+  seed pinned, revision manifests immutable and pinned, encoder AST lint.
 - **C7 — proof-file discipline** (A3, A4): the proof file must be a plain
   basename in `submission/`, a regular file (`lstat` + `O_NOFOLLOW` +
   `fstat` identity), ≤ 48 MiB stored / ≤ 256 MiB decompressed (xz via
@@ -90,10 +90,12 @@ separately by SHA-pinned actions, hash-pinned vendored sources, and
   work budget.
 - **A-2 boundary criteria**: O(n³) on ≤ 410/810-edge words — seconds at
   most on long-boundary shapes.
-- **A-3 encoding**: `F(S, m)` inside the in-harness band only (≤ 20 cells
-  m ≤ 5, ≤ 50 m ≤ 3, ≤ 100 m ≤ 2), measured (up to ~3 min / 2 GB DIMACS at
-  the top corner) and additionally wall-clock guarded (600 s →
-  `RESOURCE_EXCEEDED`); larger is rejected before work.
+- **A-3 encoding**: `F(S, m)` inside the in-harness band only (≤ 12 cells
+  m ≤ 6, ≤ 20 m ≤ 5, ≤ 50 m ≤ 3, ≤ 100 m ≤ 2), measured (up to ~3 min /
+  2 GB DIMACS at 2.5 GB RSS with the streamed encoder) and additionally
+  wall-clock guarded (600 s → `RESOURCE_EXCEEDED`); larger is rejected
+  before work. Proof payloads up to 1 GiB decompressed land on scratch disk,
+  never in memory.
 - **A-4 checkers/disk**: caps + deadline; drat-trim's LRAT emission can reach
   low GB for a 256 MiB DRAT — the runner has the space; a proof designed to
   be slow simply times out (`RESOURCE_EXCEEDED`, no score).
@@ -108,7 +110,7 @@ separately by SHA-pinned actions, hash-pinned vendored sources, and
   small shapes is a listed open question (architecture §15).
 - **R2 — encoder soundness**: a checked proof certifies UNSAT of *our* CNF;
   faithfulness rests on the obligations and their tests. Record announcements
-  additionally require external review of the epoch (architecture §13.9).
+  additionally require external review of the revision (architecture §13.9).
 - **R3 — tiler-gate coverage** (formerly "hollow entries"): closed. Under the
   fail-closed rule an unrecognised tiler cannot score: it is either in the
   census (rejected as `tiler:census`), or above it and INCONCLUSIVE (rejected

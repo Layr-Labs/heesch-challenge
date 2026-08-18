@@ -14,13 +14,13 @@ from .grids import GRIDS, Contact
 from .result import ErrorCode, Result, VerifyError
 from .transform import check_symmetry
 
-CONVENTIONS_EPOCH = "v1"
+CONVENTIONS_REVISION = "v1"
 
 
 @dataclass(frozen=True)
 class VerifyConfig:
     """Frozen conventions (spec §11) plus resource caps. The defaults are the
-    calibrated values; changing any of them is a new epoch."""
+    calibrated values; changing any of them is a new revision."""
 
     contact_mode: str = "point"       # boundary-point contact, per heesch-sat
     allow_reflections: bool = True
@@ -32,7 +32,7 @@ class VerifyConfig:
 
     def conventions(self) -> dict:
         return {
-            "epoch": CONVENTIONS_EPOCH,
+            "revision": CONVENTIONS_REVISION,
             "contact": self.contact_mode,
             "reflections": "allowed" if self.allow_reflections else "banned",
             "corona_mode": "hc_primary_hh_computed",

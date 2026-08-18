@@ -46,7 +46,7 @@ def _is_section_marker(line: str) -> bool:
 # best.heesch under submission/ and is named by a plain basename only.
 PROOF_SCHEMA_VERSION = 1
 PROOF_ENCODER_VERSION = "heesch-encoder/v2"
-PROOF_ENCODER_EPOCH = 2
+PROOF_ENCODER_REVISION = 2
 PROOF_MAX_M = 8
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 _PROOF_BASENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -76,7 +76,7 @@ class ProofBlock:
 
     m: int
     encoder_version: str
-    epoch: int
+    revision: int
     cnf_digest: str
     num_vars: int
     num_clauses: int
@@ -243,9 +243,9 @@ def _parse_proof_block(header: str, lines: _Lines) -> ProofBlock:
         raise VerifyError(
             ErrorCode.PARSE_SYNTAX, f"proof block: unsupported encoder {enc[1][:40]!r}"
         )
-    if _int(enc[2], "proof encoder epoch") != PROOF_ENCODER_EPOCH:
+    if _int(enc[2], "proof encoder revision") != PROOF_ENCODER_REVISION:
         raise VerifyError(
-            ErrorCode.PARSE_SYNTAX, f"proof block: unsupported encoder epoch {enc[2][:20]!r}"
+            ErrorCode.PARSE_SYNTAX, f"proof block: unsupported encoder revision {enc[2][:20]!r}"
         )
     m = _int(enc[3], "proof level m")
     if not 1 <= m <= PROOF_MAX_M:
@@ -278,7 +278,7 @@ def _parse_proof_block(header: str, lines: _Lines) -> ProofBlock:
     if not _HEX64_RE.match(payload):
         raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: payload digest must be 64 lowercase hex")
     return ProofBlock(
-        m=m, encoder_version=enc[1], epoch=PROOF_ENCODER_EPOCH, cnf_digest=cnf[1],
+        m=m, encoder_version=enc[1], revision=PROOF_ENCODER_REVISION, cnf_digest=cnf[1],
         num_vars=num_vars, num_clauses=num_clauses, file_name=name, fmt=fmt,
         compression=comp, payload_sha256=payload,
     )

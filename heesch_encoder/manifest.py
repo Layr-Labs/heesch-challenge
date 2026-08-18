@@ -1,7 +1,7 @@
-"""Epoch manifest (spec §11): the frozen constants, introspected from live
+"""Revision manifest (spec §11): the frozen constants, introspected from live
 code for drift detection. Any change to the placement universe, variable
 ordering, clause schema, emission order, or contact relation is a new
-version and a new epoch — bug fixes are not exempt."""
+version and a new revision — bug fixes are not exempt."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from heesch_verify.grids import GRIDS
 
 from . import amo
 
-EPOCH_DIR = pathlib.Path(__file__).parent / "epoch"
+REVISIONS_DIR = pathlib.Path(__file__).parent / "revisions"
 
 
 def live_constants() -> dict:
@@ -42,13 +42,13 @@ def constants_digest() -> str:
     return hashlib.sha256(payload.encode("ascii")).hexdigest()
 
 
-def load_epoch(n: int = 1) -> dict:
-    return json.loads((EPOCH_DIR / f"epoch-{n}.json").read_text(encoding="utf-8"))
+def load_revision(n: int = 1) -> dict:
+    return json.loads((REVISIONS_DIR / f"rev-{n}.json").read_text(encoding="utf-8"))
 
 
 def live_constants_v2() -> dict:
     """v2 frozen constants (multilevel spec §11). NEVER fold these into
-    live_constants(): its digest is pinned by the immutable epoch-1
+    live_constants(): its digest is pinned by the immutable revision-1
     manifest."""
     c = live_constants()
     c.update({

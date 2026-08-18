@@ -85,8 +85,8 @@ fills. A 196-cell nested-ring witness burns ~170–380 s e2e, fully valid at
 every level, ~3 800× baseline — always fails closed.
 
 **Fix.** A per-run work budget (Σ|level_cells|) inside `check_corona` raising
-`RESOURCE_EXCEEDED` (no epoch change). Deferred: lower `MAX_LEVELS` toward the
-corona search cap of 12 (epoch bump).
+`RESOURCE_EXCEEDED` (no revision change). Deferred: lower `MAX_LEVELS` toward the
+corona search cap of 12 (revision bump).
 
 ## V5 — Symlink → character device → unstructured OOM crash (Low)
 

@@ -14,43 +14,12 @@
     ]
   },
   "clause_emission": "amo-by-cell-then-pair, coverage-by-cell",
-  "clause_emission_v2": "f1-by-cell, f2-by-cell-then-pair, f4-by-(l,p), f5-by-(l,p,j,q), f6-by-(l,q,cell)",
   "contact_relation": "point",
   "digest_algo": "sha256",
   "dimacs_profile": "p-cnf/newline/space/zero-terminated/no-comments/v1",
-  "encoder_version": "heesch-encoder/v2",
-  "epoch": 2,
-  "families_active": [
-    "1",
-    "2",
-    "4",
-    "5",
-    "6"
-  ],
-  "feasibility_band": {
-    "basis": "docs/ml-feasibility.md (measured 2026-08-07); outside the band => RESOURCE_EXCEEDED by policy",
-    "supported": [
-      {
-        "max_cells": 20,
-        "max_m": 5
-      },
-      {
-        "max_cells": 50,
-        "max_m": 4
-      },
-      {
-        "max_cells": 100,
-        "max_m": 3
-      },
-      {
-        "max_cells": 200,
-        "max_m": 2
-      }
-    ],
-    "weak_gap_measured": "0/46 corpus shapes (docs/ml-weak-gap.md) \u2014 B=0 confirmed sufficient for all measured real shapes"
-  },
-  "frozen_constants_digest": "6a8068276a08671b0ec7d2efc659199063a2b808905f3979d023ff36600fb712",
-  "level_window": "{l-1,l,l+1}",
+  "encoder_version": "heesch-encoder/v1",
+  "revision": 1,
+  "frozen_constants_digest": "cfdfd908ade9d0fe5480a0aa23606fc270142c5fba0b889d63a14b3fafa86f85",
   "literal_order": "(abs, negative-first)",
   "placement_order": "(symmetry_index, ty, tx)",
   "point_groups": {
@@ -316,8 +285,5 @@
         0
       ]
     ]
-  },
-  "universe_construction": "reachability-bfs/v1",
-  "variable_order": "x:(l,symmetry_index,ty,tx); cov:none; sinz:group-emission",
-  "weak_bound_B": 0
+  }
 }

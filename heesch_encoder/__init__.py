@@ -12,7 +12,7 @@ stdlib-only.
 """
 
 ENCODER_VERSION = "heesch-encoder/v1"
-EPOCH = 1
+REVISION = 1
 
 from .api import EncodingResult, encode  # noqa: E402
 from .types import Formula, Placement  # noqa: E402

@@ -1,5 +1,5 @@
 """At-most-one encodings (spec §4.4). The threshold is a frozen constant
-recorded in the epoch manifest; changing it is a new epoch.
+recorded in the revision manifest; changing it is a new revision.
 
 `aux_assignment` lives HERE, beside the clause generator, so the §9.2
 geometry->model extension and the encoder can never drift apart."""

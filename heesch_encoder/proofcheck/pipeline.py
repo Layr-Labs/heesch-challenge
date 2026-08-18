@@ -127,27 +127,37 @@ def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
     steps. UNSAT verified here means no weak m-configuration exists —
     Hh <= m-1 over ALL patches (multilevel spec §2.2).
 
-    The epoch-2 feasibility band (multilevel spec §10.2) is enforced BEFORE
+    The feasibility band (multilevel spec §10.2, measured policy) is enforced BEFORE
     encoding: outside it the answer is RESOURCE_EXCEEDED by policy, so the
     server never starts an encoding it cannot finish."""
-    from ..multilevel.api import encode_multilevel, in_feasibility_band
+    from ..multilevel.api import encode_multilevel_stream, in_feasibility_band
 
     n_cells = len(frozenset(tile_cells))
     if not in_feasibility_band(n_cells, m):
         return ProofOutcome(
             ProofStatus.RESOURCE_EXCEEDED,
-            f"({n_cells} cells, m={m}) is outside the epoch-2 feasibility band",
+            f"({n_cells} cells, m={m}) is outside the encoder feasibility band",
         )
-    enc = encode_multilevel(tile_cells, grid, contact, m)
-    return check_proof_encoded(sub, enc, tier=tier, timeout=timeout,
-                               bin_dir=bin_dir, budget=budget)
+    # Stream the regenerated CNF to scratch: peak memory is then the universe,
+    # not the formula (F(S,6) of an 11-cell shape is 17M clauses / 2 GB, and
+    # materialising it took ~15 GB).
+    with tempfile.TemporaryDirectory(prefix="heesch-cnf-") as td:
+        enc = encode_multilevel_stream(tile_cells, grid, contact, m,
+                                       os.path.join(td, "regenerated.cnf"))
+        return check_proof_encoded(sub, enc, tier=tier, timeout=timeout,
+                                   bin_dir=bin_dir, budget=budget)
 
 
 def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
                         timeout: float = 3600.0, bin_dir=None, budget=None) -> ProofOutcome:
     """Steps 2-6 of the frozen order, schema-blind: works for any encoding
     object exposing digest/num_vars/num_clauses/dimacs. `bin_dir` locates the
-    checker binaries (see checkers._BIN); `budget` is a checkers.CheckBudget."""
+    checker binaries (see checkers._BIN); `budget` is a checkers.CheckBudget.
+    The encoding is either in memory (`dimacs` bytes) or streamed
+    (`write_dimacs(path)`, `cnf_bytes`, `has_empty_clause`)."""
+    streamed = not hasattr(enc, "dimacs")
+    cnf_bytes = enc.cnf_bytes if streamed else len(enc.dimacs)
+    empty_clause = enc.has_empty_clause if streamed else _has_empty_clause(enc.dimacs)
     # 2. Digest match before touching the proof.
     if enc.digest != sub.claimed_cnf_digest:
         return ProofOutcome(
@@ -202,8 +212,11 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
     # 6. Checkers.
     with tempfile.TemporaryDirectory() as td:
         cnf_path = os.path.join(td, "formula.cnf")
-        with open(cnf_path, "wb") as fh:
-            fh.write(enc.dimacs)
+        if streamed:
+            enc.write_dimacs(cnf_path)
+        else:
+            with open(cnf_path, "wb") as fh:
+                fh.write(enc.dimacs)
 
         # Record tier needs two independent VERIFIED verdicts, and one of them
         # MUST come from the formally-verified checker (cake_lpr). lrat-check is
@@ -249,13 +262,13 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
         # equivalent to synthesizing the one-line empty-clause LRAT and having
         # the checker confirm it. This never grants a record the geometry does
         # not, because the empty clause IS the contradiction.
-        if _has_empty_clause(enc.dimacs):
+        if empty_clause:
             return ProofOutcome(
                 ProofStatus.VERIFIED,
                 "trivial UNSAT: regenerated formula contains the empty clause "
                 "(checker-independent)",
                 cnf_digest=enc.digest, encoder_vars=enc.num_vars,
-                encoder_clauses=enc.num_clauses, cnf_bytes=len(enc.dimacs),
+                encoder_clauses=enc.num_clauses, cnf_bytes=cnf_bytes,
                 proof_bytes=proof_bytes, check_seconds=seconds,
                 checker_results=tuple(results),
             )
@@ -275,7 +288,7 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
             ProofStatus.VERIFIED,
             f"{len(verified)} checker(s): " + ", ".join(r.checker for r in verified),
             cnf_digest=enc.digest, encoder_vars=enc.num_vars,
-            encoder_clauses=enc.num_clauses, cnf_bytes=len(enc.dimacs),
+            encoder_clauses=enc.num_clauses, cnf_bytes=cnf_bytes,
             proof_bytes=proof_bytes, check_seconds=seconds,
             checker_results=tuple(results),
         )

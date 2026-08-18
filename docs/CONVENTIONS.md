@@ -1,9 +1,9 @@
-# Frozen conventions — epoch v1
+# Frozen conventions — revision v1
 
 Every one of these changes the answer (docs/heesch-verifier-architecture.md §11). They were
 derived from Kaplan's heesch-sat source (see `tools/NOTES-kaplan.md` for the
 transcription) and are re-confirmed by the calibration corpus; they are
-written into every result record. Changing any of them is a new epoch and
+written into every result record. Changing any of them is a new revision and
 all prior results must be re-verified.
 
 | Convention | Frozen value | Source |
@@ -15,8 +15,8 @@ all prior results must be re-verified.
 | Tile itself | Must be hole-free (topological disk) | spec §11; holed heptomino rejects |
 | Central transform | Need not be identity | spec §11 |
 | Hole test | Padded-bbox flood fill of the complement, edge adjacency | spec §7 Stage 2 (heesch-sat's halo-connectivity definition is differentially tested as equivalent) |
-| Span | Extent (max − min + 1) per axis in grid coordinates; span_x + span_y ≤ 29 | Epoch limit, adopted verbatim (bitmap-size workaround) |
-| Cell cap | ≤ 200 cells | Epoch limit |
+| Span | Extent (max − min + 1) per axis in grid coordinates; span_x + span_y ≤ 29 | Revision limit, adopted verbatim (bitmap-size workaround) |
+| Cell cap | ≤ 200 cells | Revision limit |
 | Placement cap | 20 000 per patch (RESOURCE_EXCEEDED beyond, requeueable) | resource bound |
 | Corona level cap | 64 (resource bound, far above the search cap of 12) | resource bound |
 

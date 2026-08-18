@@ -28,8 +28,8 @@ MAX_LEVELS = 64  # resource bound, far above the corona search cap of 12
 # corona search cap) of a 200-cell tile is ~1.2M, and even an unprecedented
 # hc~30 witness (the class record is 4) stays under this, so a genuine
 # discovery is never rejected. Only deep or ring-inflated abuse patches reach
-# it. It is a resource bound, not a frozen convention, so no epoch bump is
-# needed (lowering MAX_LEVELS toward 12 is the deferred epoch-2 change).
+# it. It is a resource bound, not a frozen convention, so no revision bump is
+# needed (lowering MAX_LEVELS toward 12 is the deferred revision-2 change).
 # Applied only on the participant path (witness.py); the encoder oracle passes
 # max_work=None so its large round-trip patches are unaffected.
 MAX_CORONA_WORK = 8_000_000

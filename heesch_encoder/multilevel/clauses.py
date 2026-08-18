@@ -25,10 +25,55 @@ from .types import MLFormula
 from .universe import multilevel_universe, touching_cellset_pairs
 
 
+class MLClauseStream:
+    """The v2 clause construction as a generator (spec §5/§6). `clauses()`
+    yields every clause, already literal-ordered, in the frozen emission
+    order; the metadata (levels, offsets, AMO groups, R_0, family counts,
+    num_vars) is complete once the generator is exhausted. Both consumers —
+    `build_ml_formula` (materialised MLFormula, used by the round-trip suites)
+    and `encode_multilevel_stream` (DIMACS straight to disk, used by the
+    proof pipeline for large instances) — draw from this one generator, so
+    they cannot drift: the streamed bytes are the emitted bytes."""
+
+    def __init__(self, tile_cells, grid: Grid, contact: Contact, m: int,
+                 amo_threshold: int = AMO_THRESHOLD):
+        self.tile = frozenset(tile_cells)
+        self.grid = grid
+        self.contact = contact
+        self.m = m
+        self.amo_threshold = amo_threshold
+        self.uni = multilevel_universe(self.tile, grid, contact, m)
+        self.level_offsets: tuple = ()
+        self.amo_groups: tuple = ()
+        self.required_cells: tuple = ()
+        self.family_counts: tuple = ()
+        self.num_vars: int = 0
+        self.num_clauses: int = 0
+        self.done = False
+
+    def clauses(self):
+        yield from _ml_clauses(self)
+
+
 def build_ml_formula(tile_cells, grid: Grid, contact: Contact, m: int,
                      amo_threshold: int = AMO_THRESHOLD) -> MLFormula:
-    tile = frozenset(tile_cells)
-    uni = multilevel_universe(tile, grid, contact, m)
+    stream = MLClauseStream(tile_cells, grid, contact, m, amo_threshold)
+    ordered = tuple(stream.clauses())
+    return MLFormula(
+        m=m,
+        num_vars=stream.num_vars,
+        clauses=ordered,
+        levels=stream.uni.levels,
+        level_offsets=stream.level_offsets,
+        amo_groups=stream.amo_groups,
+        required_cells=stream.required_cells,
+        family_counts=stream.family_counts,
+    )
+
+
+def _ml_clauses(st: MLClauseStream):
+    tile, grid, contact, m, amo_threshold, uni = (
+        st.tile, st.grid, st.contact, st.m, st.amo_threshold, st.uni)
 
     # Variable numbering: concatenated per-level sorted lists (level-major
     # xvar order by construction).
@@ -51,15 +96,20 @@ def build_ml_formula(tile_cells, grid: Grid, contact: Contact, m: int,
     for c, vs in cover.items():  # ordered-ok: assertion only, no emission
         assert vs == sorted(vs)
 
-    clauses: list = []
     counts = {"1": 0, "2": 0, "4": 0, "5": 0, "6": 0}
+    emitted = 0
+
+    def out(cl):
+        nonlocal emitted
+        emitted += 1
+        return tuple(sorted(cl, key=literal_key))
 
     # ---- family 1: base coverage of R_0 by level-1 placements (W1) ----
     R0 = sorted_cells(required_set(tile, contact))  # ordered-ok: sorted
     lvl1_end = level_offsets[1] if m >= 2 else total_x
     for c in R0:
         vs = tuple(v for v in cover.get(c, ()) if v <= lvl1_end)
-        clauses.append(vs)  # empty clause is a real, deliberate artifact
+        yield out(vs)  # empty clause is a real, deliberate artifact
         counts["1"] += 1
 
     # ---- family 2: per-cell at-most-one across levels ----
@@ -70,12 +120,14 @@ def build_ml_formula(tile_cells, grid: Grid, contact: Contact, m: int,
         vs = cover[c]
         if len(vs) <= amo_threshold:
             pcs = pairwise(vs)
-            clauses.extend(pcs)
+            for cl in pcs:
+                yield out(cl)
             counts["2"] += len(pcs)
             amo_groups.append(AmoGroup(cell=c, variables=tuple(vs), kind="pairwise"))
         else:
             scs, aux_count = sequential(vs, next_aux)
-            clauses.extend(scs)
+            for cl in scs:
+                yield out(cl)
             counts["2"] += len(scs)
             amo_groups.append(
                 AmoGroup(cell=c, variables=tuple(vs), kind="sequential",
@@ -115,7 +167,7 @@ def build_ml_formula(tile_cells, grid: Grid, contact: Contact, m: int,
         for i, p in enumerate(lv):
             v = level_offsets[li] + i + 1
             below = _touch_vars(uni.cells_of[p], li)  # level li == l-1 (1-indexed)
-            clauses.append(tuple([-v] + below))
+            yield out(tuple([-v] + below))
             counts["4"] += 1
 
     # ---- family 5: separation (W3) ----
@@ -125,7 +177,7 @@ def build_ml_formula(tile_cells, grid: Grid, contact: Contact, m: int,
             v = level_offsets[li] + i + 1
             for j in range(1, li):  # levels 1..l-2 (1-indexed j)
                 for w in _touch_vars(uni.cells_of[p], j):
-                    clauses.append((-v, -w))
+                    yield out((-v, -w))
                     counts["5"] += 1
 
     # ---- family 6: per-tile surround (W4) ----
@@ -143,17 +195,13 @@ def build_ml_formula(tile_cells, grid: Grid, contact: Contact, m: int,
                     w for w in cover.get(h, ())
                     if lo <= var_meta[w][0] <= hi
                 )
-                clauses.append(tuple([-v] + list(window)))
+                yield out(tuple([-v] + list(window)))
                 counts["6"] += 1
 
-    ordered = tuple(tuple(sorted(cl, key=literal_key)) for cl in clauses)
-    return MLFormula(
-        m=m,
-        num_vars=next_aux - 1,
-        clauses=ordered,
-        levels=uni.levels,
-        level_offsets=tuple(level_offsets),
-        amo_groups=tuple(amo_groups),
-        required_cells=tuple(R0),
-        family_counts=tuple(sorted(counts.items())),
-    )
+    st.level_offsets = tuple(level_offsets)
+    st.amo_groups = tuple(amo_groups)
+    st.required_cells = tuple(R0)
+    st.family_counts = tuple(sorted(counts.items()))
+    st.num_vars = next_aux - 1
+    st.num_clauses = emitted
+    st.done = True

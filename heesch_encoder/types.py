@@ -1,6 +1,6 @@
 """Core encoder types. Placement field order IS the §3.3 canonical sort key —
 NamedTuple ordering gives (symmetry_index, ty, tx) for free; do not reorder
-fields, that is a new epoch."""
+fields, that is a new revision."""
 
 from __future__ import annotations
 
