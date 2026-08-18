@@ -49,20 +49,7 @@ jobs:
           # e2e tests below run against the real cake_lpr on this runner.
           test -x tools/bin/cake_lpr
       - name: Tests
-        if: runner.os == 'Linux'
         run: python -m pytest tests/ -q
-      - name: Tests (per-file, diagnosing the Windows exit status)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $files = Get-ChildItem -Recurse -Path tests -Filter 'test_*.py' | ForEach-Object { $_.FullName }
-          $bad = 0
-          foreach ($f in $files) {
-            python -m pytest $f -q -p no:cacheprovider 2>&1 | Select-Object -Last 1
-            Write-Host "EXIT=$LASTEXITCODE  $f"
-            if ($LASTEXITCODE -ne 0) { $bad = 1 }
-          }
-          exit $bad
       - name: Proof path e2e (real checkers) and census regression
         if: runner.os == 'Linux'
         run: python -m pytest tests/test_proof_gate.py tests/test_census_gate.py -q -rs

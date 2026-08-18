@@ -56,10 +56,20 @@ def _block(m, cnf, nv, nc, name, fmt, comp, payload):
     return f"#PROOF 1\nencoder heesch-encoder/v2 2 {m}\ncnf {cnf} {nv} {nc}\nfile {name} {fmt} {comp} {payload}\n"
 
 
+def _pysat_with_proof():
+    """pysat with DRAT logging. On Windows the native solver's proof-logging
+    mode crashes the interpreter at shutdown (0xC0000409 fail-fast) after
+    the tests pass, so proof GENERATION is skipped there; the checkers
+    (cake_lpr) are Linux-only anyway, and the harness side never needs pysat."""
+    if os.name == "nt":
+        pytest.skip("pysat proof logging crashes at interpreter exit on Windows")
+    return pytest.importorskip("pysat.solvers")
+
+
 @pytest.fixture(scope="module")
 def unsat_proof():
     """A real F(S,3) DRAT for the 11-omino (Hh = 2, so F(S,3) is UNSAT)."""
-    pysat = pytest.importorskip("pysat.solvers")
+    pysat = _pysat_with_proof()
     from heesch_encoder.multilevel.api import encode_multilevel
 
     out = verify_witness(CENSUS_11)
@@ -257,7 +267,7 @@ def test_cli_check_proof_matches_harness(tmp_path, unsat_proof):
 def test_census_shape_plus_exact_proof(tmp_path):
     """A census shape may ALSO carry a proof: with m = hh + 1 the value is
     exact and both evidences are recorded (census+proof)."""
-    pysat = pytest.importorskip("pysat.solvers")
+    pysat = _pysat_with_proof()
     d = checker_dir_for_tests(tmp_path)
     if d is None:
         pytest.skip("tools/bin checkers not built")
