@@ -60,9 +60,12 @@ python tools/prove.py submission/best.heesch --check
 
 `prove.py` encodes `F(S, m)` for `m = hh + 1` with the same encoder the
 harness uses (streamed to disk), solves it in a worker process with proof
-logging, verifies the DRAT with drat-trim and writes the trimmed LRAT as
-`submission/proof.lrat.xz` plus the `#PROOF` block; `--check` runs the
-harness's own gate on the result. If `F(S, m)` is SAT the shape may have a deeper corona than your
+logging (trying several solvers until drat-trim verifies the DRAT), and writes
+`submission/proof.lrat.xz` (the trimmed LRAT, ids relative to the core) plus
+`submission/core.txt.xz` (the few percent of the formula's clauses the proof
+actually uses — the harness checks each one is a clause of its own
+regenerated formula and hands the checkers only those) and the `#PROOF`
+block; `--check` runs the harness's own gate on the result. If `F(S, m)` is SAT the shape may have a deeper corona than your
 witness shows (raise the witness, or `--m` higher) — or it tiles.
 
 ## File format (heesch-sat, adopted verbatim)
@@ -143,10 +146,11 @@ search loop; they are API (`docs/heesch-verifier-architecture.md` §8).
   `RESOURCE_EXCEEDED` — every known Hc = 4 shape's exactness proof `F(S,5)`
   fits; an `Hc ≥ 5` certificate `F(S,6)` is producible for shapes up to
   12 cells (measured: ~2 min to encode, ~3 min to solve, 25 MB xz LRAT) and
-  is checked in-band on runners with ≥ 12 GB RAM — on the standard 8 GB
-  GitHub runner the formally-verified checker runs out of heap and the
-  submission is `RESOURCE_EXCEEDED`, which routes it to the out-of-band
-  record procedure, `docs/heesch-verifier-architecture.md` §13.9);
+  is checked in-band because the checkers only load the proof's core clauses
+  (see `docs/heesch-verifier-architecture.md` §13.3 5b; without a core list
+  the formally-verified checker needs > 6 GB and the standard 8 GB runner
+  answers `RESOURCE_EXCEEDED`, routing the entry to the out-of-band record
+  procedure, §13.9);
   a proof block that is present but broken rejects even a census shape.
   `m = hh + 1` makes the value exact; larger `m` certifies non-tilerhood
   with the lower bound only.

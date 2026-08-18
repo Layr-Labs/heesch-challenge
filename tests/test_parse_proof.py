@@ -101,3 +101,30 @@ def test_emit_epoch_strips_proof_block(tmp_path):
     src.write_text(monomino_hc1() + block(), encoding="ascii")
     assert cli.main([str(src), "--emit-epoch", str(out)]) == 0
     assert out.read_text() == monomino_hc1()
+
+
+CORE = "core core.txt.xz xz " + "c" * 64 + " 6305\n"
+
+
+def test_core_line_round_trips():
+    sub = parse_submission(monomino_hc1() + block(name="p.lrat.xz", fmt="lrat", comp="xz") + CORE)
+    assert sub.proof.core_file == "core.txt.xz" and sub.proof.core_compression == "xz"
+    assert sub.proof.core_sha256 == "c" * 64 and sub.proof.core_clauses == 6305
+
+
+@pytest.mark.parametrize("bad", [
+    block() + CORE,                                                    # core with drat
+    block(name="p.lrat", fmt="lrat") + "core core.txt xz " + "c" * 64 + " 5\n",   # xz says .xz
+    block(name="p.lrat", fmt="lrat") + "core core.txt.xz none " + "c" * 64 + " 5\n",
+    block(name="p.lrat", fmt="lrat") + "core ../c.txt none " + "c" * 64 + " 5\n",
+    block(name="p.lrat", fmt="lrat") + "core p.lrat none " + "c" * 64 + " 5\n",     # same as proof
+    block(name="p.lrat", fmt="lrat") + "core best.heesch none " + "c" * 64 + " 5\n",
+    block(name="p.lrat", fmt="lrat") + "core c.txt none " + "C" * 64 + " 5\n",
+    block(name="p.lrat", fmt="lrat") + "core c.txt none " + "c" * 64 + " 0\n",
+    block(name="p.lrat", fmt="lrat") + "core c.txt none " + "c" * 64 + "\n",
+    block(name="p.lrat", fmt="lrat") + CORE.replace(".xz", "") + CORE,     # duplicate core
+])
+def test_bad_core_lines(bad):
+    with pytest.raises(VerifyError) as ei:
+        parse_submission(monomino_hc1() + bad)
+    assert ei.value.code is ErrorCode.PARSE_SYNTAX

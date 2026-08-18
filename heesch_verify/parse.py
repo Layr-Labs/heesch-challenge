@@ -69,9 +69,13 @@ class ProofBlock:
         encoder heesch-encoder/v2 2 <m>
         cnf <cnf_sha256> <num_vars> <num_clauses>
         file <basename> <drat|lrat> <none|xz> <payload_sha256>
+        core <basename> <none|xz> <payload_sha256> <num_clauses>   (optional, lrat only)
 
-    `payload_sha256` is over the DEcompressed proof bytes (what the checkers
-    read); `cnf_sha256` is the digest of the regenerated DIMACS for F(S, m).
+    `payload_sha256` is over the DEcompressed bytes (what the checkers read);
+    `cnf_sha256` is the digest of the regenerated DIMACS for F(S, m). The
+    optional `core` line names a clause list — a subset of F the LRAT proof
+    refutes (architecture §13.3 step 5b); its clause ids in the LRAT are
+    positions in that list.
     """
 
     m: int
@@ -84,6 +88,10 @@ class ProofBlock:
     fmt: str            # "drat" | "lrat"
     compression: str    # "none" | "xz"
     payload_sha256: str
+    core_file: str | None = None
+    core_compression: str = "none"
+    core_sha256: str | None = None
+    core_clauses: int = 0
 
 
 @dataclass(frozen=True)
@@ -277,10 +285,39 @@ def _parse_proof_block(header: str, lines: _Lines) -> ProofBlock:
         )
     if not _HEX64_RE.match(payload):
         raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: payload digest must be 64 lowercase hex")
+    core_file = None
+    core_comp = "none"
+    core_sha = None
+    core_n = 0
+    nxt = _peek_marker(lines)
+    if nxt is not None and nxt.split()[0] == "core":
+        lines.next("proof block 'core' line")
+        ct = nxt.split()
+        if len(ct) != 5:
+            raise VerifyError(ErrorCode.PARSE_SYNTAX,
+                              "proof block: expected 'core <file> <none|xz> <sha256> <num_clauses>'")
+        if fmt != "lrat":
+            raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: a core list requires format lrat")
+        core_file, core_comp, core_sha = ct[1], ct[2], ct[3]
+        if not _PROOF_BASENAME_RE.match(core_file) or core_file in ("best.heesch", name):
+            raise VerifyError(ErrorCode.PARSE_SYNTAX,
+                              f"proof block: illegal core file name {core_file[:80]!r}")
+        if core_comp not in ("none", "xz"):
+            raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: core compression must be none|xz")
+        if core_comp == "xz" and not core_file.endswith(".xz"):
+            raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: xz core file must end in .xz")
+        if core_comp == "none" and core_file.endswith(".xz"):
+            raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: uncompressed core file must not end in .xz")
+        if not _HEX64_RE.match(core_sha):
+            raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: core digest must be 64 lowercase hex")
+        core_n = _int(ct[4], "proof core clause count")
+        if core_n < 1:
+            raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: core clause count must be >= 1")
     return ProofBlock(
         m=m, encoder_version=enc[1], revision=PROOF_ENCODER_REVISION, cnf_digest=cnf[1],
         num_vars=num_vars, num_clauses=num_clauses, file_name=name, fmt=fmt,
-        compression=comp, payload_sha256=payload,
+        compression=comp, payload_sha256=payload, core_file=core_file,
+        core_compression=core_comp, core_sha256=core_sha, core_clauses=core_n,
     )
 
 

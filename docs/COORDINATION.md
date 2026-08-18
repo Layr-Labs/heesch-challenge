@@ -54,7 +54,7 @@ the verify stage (defense-in-depth; our harness executes no competitor code).
   *announcements* rather than scoring: (c) external review of the M1–M9
   arguments (docs/soundness-note.md, docs/heesch-multilevel-encoder-spec.md
   §8) and a citable proof of E7. `benchmark.json maxSubmissionBytes` is
-  64 MiB to carry proof files (48 MiB cap in the harness); confirm the
+  128 MiB to carry proof + core files (48 MiB per-file cap in the harness); confirm the
   platform ceiling.
 
 ## Questions for Bartosz (architecture §15, unchanged)

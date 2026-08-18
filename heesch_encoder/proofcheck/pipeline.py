@@ -63,6 +63,7 @@ class ProofOutcome:
     proof_bytes: int = 0
     check_seconds: float = 0.0
     checker_results: tuple = field(default_factory=tuple)
+    core_clauses: int = 0          # > 0 when the checkers ran on a verified core subset
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,7 @@ class ProofSubmission:
     claimed_cnf_digest: str
     claimed_vars: int
     claimed_clauses: int
+    claimed_core_clauses: int = 0   # with a core list: its declared clause count
 
 
 def _has_empty_clause(dimacs: bytes) -> bool:
@@ -122,7 +124,7 @@ def check_proof(sub: ProofSubmission, tile_cells, patch_cells, grid, contact,
 
 def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
                    tier: Tier = Tier.RECORD, timeout: float = 3600.0,
-                   bin_dir=None, budget=None) -> ProofOutcome:
+                   bin_dir=None, budget=None, core_path=None) -> ProofOutcome:
     """v2 path: regenerate the multilevel F(S, m) then the same frozen
     steps. UNSAT verified here means no weak m-configuration exists —
     Hh <= m-1 over ALL patches (multilevel spec §2.2).
@@ -145,16 +147,20 @@ def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
         enc = encode_multilevel_stream(tile_cells, grid, contact, m,
                                        os.path.join(td, "regenerated.cnf"))
         return check_proof_encoded(sub, enc, tier=tier, timeout=timeout,
-                                   bin_dir=bin_dir, budget=budget)
+                                   bin_dir=bin_dir, budget=budget, core_path=core_path)
 
 
 def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
-                        timeout: float = 3600.0, bin_dir=None, budget=None) -> ProofOutcome:
+                        timeout: float = 3600.0, bin_dir=None, budget=None,
+                        core_path=None) -> ProofOutcome:
     """Steps 2-6 of the frozen order, schema-blind: works for any encoding
     object exposing digest/num_vars/num_clauses/dimacs. `bin_dir` locates the
     checker binaries (see checkers._BIN); `budget` is a checkers.CheckBudget.
     The encoding is either in memory (`dimacs` bytes) or streamed
-    (`write_dimacs(path)`, `cnf_bytes`, `has_empty_clause`)."""
+    (`write_dimacs(path)`, `cnf_bytes`, `has_empty_clause`).
+    `core_path` (LRAT only): a submitter-supplied clause list; every clause is
+    checked to be a clause of the regenerated formula (proofcheck.core) and
+    the checkers then run on that verified subset — step 5b."""
     streamed = not hasattr(enc, "dimacs")
     cnf_bytes = enc.cnf_bytes if streamed else len(enc.dimacs)
     empty_clause = enc.has_empty_clause if streamed else _has_empty_clause(enc.dimacs)
@@ -208,6 +214,10 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
     if fmt in (ProofFormat.DRAT_TEXT, ProofFormat.LRAT_TEXT) and not tail_wellformed(sub.proof_path):
         return ProofOutcome(ProofStatus.PROOF_TRUNCATED, "proof does not end on a terminated line",
                             cnf_digest=enc.digest, proof_bytes=proof_bytes)
+    if core_path is not None and fmt is not ProofFormat.LRAT_TEXT:
+        return ProofOutcome(ProofStatus.GATE_PROOF_INVALID,
+                            "a core clause list is only valid with an LRAT proof",
+                            cnf_digest=enc.digest, proof_bytes=proof_bytes)
 
     # 6. Checkers.
     with tempfile.TemporaryDirectory() as td:
@@ -217,6 +227,26 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
         else:
             with open(cnf_path, "wb") as fh:
                 fh.write(enc.dimacs)
+        core_clauses = 0
+        if core_path is not None:
+            # 5b. Core subset: exact membership against F, then the checkers
+            # run on the core CNF WE write from F's own lines.
+            from . import core as core_mod
+
+            try:
+                core_lines = core_mod.parse_core_file(core_path)
+                core_res = core_mod.check_and_write_core(
+                    core_lines, cnf_path, enc.num_vars, os.path.join(td, "core.cnf"))
+            except core_mod.CoreError as e:
+                return ProofOutcome(ProofStatus[e.code], "core: " + e.message,
+                                    cnf_digest=enc.digest, proof_bytes=proof_bytes)
+            core_clauses = core_res.num_clauses
+            if sub.claimed_core_clauses and sub.claimed_core_clauses != core_clauses:
+                return ProofOutcome(ProofStatus.PROOF_HEADER_MISMATCH,
+                                    f"core declares {sub.claimed_core_clauses} clauses, "
+                                    f"file has {core_clauses}",
+                                    cnf_digest=enc.digest, proof_bytes=proof_bytes)
+            cnf_path = core_res.core_cnf_path
 
         # Record tier needs two independent VERIFIED verdicts, and one of them
         # MUST come from the formally-verified checker (cake_lpr). lrat-check is
@@ -293,7 +323,7 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
             cnf_digest=enc.digest, encoder_vars=enc.num_vars,
             encoder_clauses=enc.num_clauses, cnf_bytes=cnf_bytes,
             proof_bytes=proof_bytes, check_seconds=seconds,
-            checker_results=tuple(results),
+            checker_results=tuple(results), core_clauses=core_clauses,
         )
     return ProofOutcome(
         ProofStatus.GATE_PROOF_INVALID,

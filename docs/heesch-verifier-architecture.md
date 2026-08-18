@@ -147,6 +147,7 @@ k+1 <a,b,c,d,e,f>
 encoder heesch-encoder/v2 2 <m>
 cnf <cnf_sha256> <num_vars> <num_clauses>
 file <basename> <drat|lrat> <none|xz> <payload_sha256>
+core <basename> <none|xz> <payload_sha256> <num_clauses>   # optional, lrat only (§13.3 5b)
 ```
 
 Rules: CRLF and repeated spaces tolerated; markers are exact first tokens
@@ -329,7 +330,12 @@ sha256 and header counts; the proof file's basename
 compression, never `best.heesch`), format `drat|lrat`, compression
 `none|xz`, and the sha256 of the *decompressed* payload. The CNF is encoded
 from the tile's canonical form (`canonical.canonical_form(cells, grid, True)`)
-by both `tools/prove.py` and the harness — that is the digest contract.
+by both `tools/prove.py` and the harness — that is the digest contract. An
+optional `core` line names a clause list — the subset of `F(S, m)` the LRAT
+proof refutes, one clause per line, its ids in the LRAT being positions in
+that list — so the checkers load only the clauses the proof uses (measured
+3.5–12 % of F); this is what makes record-scale proofs checkable in-band
+(§13.3 step 5b). `tools/prove.py` produces it by default.
 
 ### 13.3 Order of operations (`ProofCarryingGate.check`, then `check_proof_v2`)
 1. Level rule: `m >= hh_verified + 1`, else `PROOF_LEVEL_INCONSISTENT`
@@ -347,10 +353,24 @@ by both `tools/prove.py` and the harness — that is the digest contract.
    name, xz decompressed with `lzma` (memlimit 256 MiB, decompressed cap
    256 MiB, no trailing data), sha256 compared with the block
    (`PROOF_FILE_INVALID`, `RESOURCE_EXCEEDED`, `PROOF_FILE_DIGEST_MISMATCH`).
-5. Regenerate `F(S, m)`; digest match (`PROOF_CNF_DIGEST_MISMATCH`), header
-   match (`PROOF_HEADER_MISMATCH`), argv guard, size gate, format sniff on
-   bounded windows (`GATE_PROOF_INVALID` for SAT models/empty/unknown,
-   `PROOF_TRUNCATED`), then checkers.
+5. Regenerate `F(S, m)` (streamed to scratch); digest match
+   (`PROOF_CNF_DIGEST_MISMATCH`), header match (`PROOF_HEADER_MISMATCH`), argv
+   guard, size gate, format sniff on bounded windows (`GATE_PROOF_INVALID` for
+   SAT models/empty/unknown, `PROOF_TRUNCATED`), then checkers.
+   5b. **Core subset** (`heesch_encoder/proofcheck/core.py`, LRAT only, when a
+   `core` line is present): the submitted clause list is parsed with a strict
+   grammar (one clause per line, integers, `0`-terminated, no comments/headers,
+   no tautologies), each clause canonicalised (duplicate literals removed,
+   encoder literal order — the order F is emitted in), and **every clause must
+   be, by exact string equality against F's own streamed DIMACS lines, a
+   clause of F**; the checkers then run on a core CNF *we* write from F's own
+   lines in the submitter's order under a header naming F's variable count.
+   Soundness: a refutation of a subset of F refutes F (every model of F
+   satisfies the subset), for RUP and RAT steps alike; the only trust added is
+   the exact-membership check, the same class as the digest/header match. Any
+   missing clause, count mismatch or grammar deviation rejects
+   (`GATE_PROOF_INVALID` / `PROOF_HEADER_MISMATCH`) before a checker runs;
+   caps (`CORE_MAX_CLAUSES`, `CORE_MAX_BYTES`) bound the work.
 6. Verdict mapping is 1:1 from `ProofStatus` to §8 codes; `VERIFIED` yields
    the §9.3 fields.
 

@@ -222,6 +222,7 @@ def main() -> None:
             proof_sha256=proof_verdict.proof_sha256,
             proof_format=proof_verdict.fmt,
             proof_checkers=tuple(proof_verdict.checkers_verified),
+            proof_core_clauses=proof_verdict.core_clauses,
         )
 
     if not evidence:

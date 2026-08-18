@@ -126,6 +126,7 @@ class Result:
     proof_sha256: str = ""
     proof_format: str = ""
     proof_checkers: tuple = ()
+    proof_core_clauses: int = 0    # > 0 when checked on a verified core subset of F
     hh_exact: bool = False         # Hh established exactly (= hh_verified)
     exact: bool = False            # Hc = Hh = hc_verified established exactly
     record_eligible: bool = False  # exact, proof-backed, hc_verified >= 5
@@ -167,6 +168,7 @@ class Result:
             "proof_sha256": self.proof_sha256,
             "proof_format": self.proof_format,
             "proof_checkers": list(self.proof_checkers),
+            "proof_core_clauses": self.proof_core_clauses,
             "hh_exact": self.hh_exact,
             "exact": self.exact,
             "record_eligible": self.record_eligible,

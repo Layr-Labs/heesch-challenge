@@ -54,13 +54,113 @@ def strip_proof_block(text: str) -> str:
     return "\n".join(out).rstrip("\n") + "\n"
 
 
-def proof_block(m, cnf_digest, num_vars, num_clauses, name, fmt, comp, payload_sha) -> str:
-    return (
+def proof_block(m, cnf_digest, num_vars, num_clauses, name, fmt, comp, payload_sha,
+                core=None) -> str:
+    text = (
         f"#PROOF {PROOF_SCHEMA_VERSION}\n"
         f"encoder {PROOF_ENCODER_VERSION} {PROOF_ENCODER_REVISION} {m}\n"
         f"cnf {cnf_digest} {num_vars} {num_clauses}\n"
         f"file {name} {fmt} {comp} {payload_sha}\n"
     )
+    if core is not None:
+        core_name, core_comp, core_sha, core_n = core
+        text += f"core {core_name} {core_comp} {core_sha} {core_n}\n"
+    return text
+
+
+def make_core_lrat(cnf_path: pathlib.Path, drat_path: pathlib.Path, drat_trim: pathlib.Path,
+                   workdir: pathlib.Path):
+    """From F (cnf_path) and a verified DRAT, produce
+      core.txt  — the original clauses the LRAT actually references (by
+                  F-id), one per line, F's own bytes, in F order — the
+                  submitted core list; and
+      core.lrat — the LRAT with clause ids renumbered to positions in
+                  core.txt (lemmas densely after |core|); deletions of
+                  non-core originals are dropped.
+    Returns (core_txt, core_lrat, n_core, n_formula) or raises RuntimeError.
+    Only the submitter runs this; the harness re-derives everything it trusts
+    (proofcheck.core: exact membership of every core clause in F). The core is
+    defined by ids, not clause text, because F may contain the same clause
+    at two ids and only one of them is used by the proof."""
+    full_lrat = workdir / "full.lrat"
+    proc = subprocess.run([str(drat_trim), str(cnf_path), str(drat_path), "-L", str(full_lrat)],
+                          capture_output=True, text=True, errors="replace",
+                          stdin=subprocess.DEVNULL)
+    if not any(ln.strip() == "s VERIFIED" for ln in proc.stdout.splitlines()):
+        raise RuntimeError("drat-trim did not verify the DRAT while emitting the LRAT:\n"
+                           + proc.stdout[-800:])
+    n_formula = 0
+    with open(cnf_path, "r", encoding="ascii") as fh:
+        head = fh.readline().split()
+        n_formula = int(head[3])
+    # Pass 1: which original ids do the hints reference?
+    used = set()
+    with open(full_lrat, "r", encoding="ascii") as fh:
+        for raw in fh:
+            toks = raw.split()
+            if len(toks) < 2 or toks[1] == "d":
+                continue
+            rest = [int(t) for t in toks[1:]]
+            z = rest.index(0)
+            for h in rest[z + 1:]:
+                a = -h if h < 0 else h
+                if 0 < a <= n_formula:
+                    used.add(a)
+    if not used:
+        raise RuntimeError("the LRAT references no original clause")
+    core_ids = sorted(used)
+    fid_to_core = {fid: i + 1 for i, fid in enumerate(core_ids)}
+    # Pass over F: F's own bytes for the core ids, in F order.
+    core_txt = workdir / "core.txt"
+    n_core = 0
+    with open(cnf_path, "r", encoding="ascii") as fh, \
+            open(core_txt, "w", encoding="ascii", newline="\n") as out:
+        next(fh)
+        for fid, raw in enumerate(fh, 1):
+            if fid in fid_to_core:
+                out.write(raw if raw.endswith("\n") else raw + "\n")
+                n_core += 1
+    if n_core != len(core_ids):
+        raise RuntimeError("core id beyond the formula's clause count")
+    # Pass 2: renumber the LRAT.
+    lemma_map = {}
+    next_id = n_core
+    core_lrat = workdir / "core.lrat"
+
+    def map_id(x, allow_missing=False):
+        neg = x < 0
+        a = -x if neg else x
+        m = fid_to_core.get(a) if a <= n_formula else lemma_map.get(a)
+        if m is None:
+            if allow_missing:
+                return None
+            raise RuntimeError(f"LRAT references clause id {a} that is not in the core")
+        return -m if neg else m
+
+    with open(full_lrat, "r", encoding="ascii") as fh, \
+            open(core_lrat, "w", encoding="ascii", newline="\n") as out:
+        for raw in fh:
+            toks = raw.split()
+            if not toks:
+                continue
+            if len(toks) >= 2 and toks[1] == "d":
+                ids = [map_id(int(t), allow_missing=True) for t in toks[2:] if t != "0"]
+                ids = [i for i in ids if i is not None]
+                if ids:
+                    out.write(f"{next_id} d " + " ".join(str(i) for i in ids) + " 0\n")
+                continue
+            old_id = int(toks[0])
+            rest = [int(t) for t in toks[1:]]
+            z = rest.index(0)
+            lits, hints = rest[:z], rest[z + 1:]
+            if hints and hints[-1] == 0:
+                hints = hints[:-1]
+            next_id += 1
+            lemma_map[old_id] = next_id
+            hints_m = [map_id(h) for h in hints]
+            out.write(f"{next_id} " + " ".join(str(l) for l in lits) + " 0 "
+                      + " ".join(str(h) for h in hints_m) + " 0\n")
+    return core_txt, core_lrat, n_core, n_formula
 
 
 def sha256_file(path: pathlib.Path) -> str:
@@ -164,6 +264,10 @@ def main(argv=None) -> int:
                          "cadical195, lingeling in turn and keep the first DRAT that drat-trim "
                          "verifies — python-sat's proof tracing has produced unverifiable DRATs "
                          "on some formulas with individual solvers")
+    ap.add_argument("--no-core", action="store_true",
+                    help="submit the LRAT against the full formula instead of the core clause "
+                         "list (default: core — the checkers then load only the clauses the "
+                         "proof uses, which is what makes record-scale proofs checkable)")
     ap.add_argument("--no-selfcheck", action="store_true",
                     help="skip the drat-trim self-check of the DRAT (default: run it when tools/bin/drat-trim exists)")
     ap.add_argument("--check", action="store_true", help="run the harness's ProofCarryingGate afterwards")
@@ -256,6 +360,42 @@ def main(argv=None) -> int:
               "(tried " + ", ".join(solvers) + ")", file=sys.stderr)
         return 1
     payload_path = lrat_path if args.format == "lrat" else drat_path
+    core = None
+    if args.format == "lrat" and not args.no_core:
+        print("extracting the core clause list and renumbering the LRAT ...", flush=True)
+        try:
+            core_txt, core_lrat, n_core, n_formula = make_core_lrat(cnf_path, drat_path, drat_trim, tmpdir)
+        except RuntimeError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        print(f"  core: {n_core} of {n_formula} clauses ({100.0 * n_core / n_formula:.1f} %)", flush=True)
+        lrat_check = checker_path("lrat-check", os.environ.get("HEESCH_CHECKER_DIR") or (ROOT / "tools" / "bin"))
+        if lrat_check.exists():
+            core_cnf = tmpdir / "core.cnf"
+            with open(core_cnf, "w", encoding="ascii", newline="\n") as out, \
+                    open(core_txt, "r", encoding="ascii") as src:
+                out.write(f"p cnf {enc.num_vars} {n_core}\n")
+                for line in src:
+                    out.write(line)
+            proc = subprocess.run([str(lrat_check), str(core_cnf), str(core_lrat)],
+                                  capture_output=True, text=True, errors="replace",
+                                  stdin=subprocess.DEVNULL)
+            if not any(ln.strip() == "c VERIFIED" for ln in proc.stdout.splitlines()):
+                print("error: lrat-check did not verify the core-relative LRAT:\n" + proc.stdout[-800:],
+                      file=sys.stderr)
+                return 1
+            print("  lrat-check self-check on the core: c VERIFIED", flush=True)
+        payload_path = core_lrat
+        core_name = "core.txt" + (".xz" if args.xz else "")
+        core_sha = sha256_file(core_txt)
+        core_final = dest_dir / core_name
+        if args.xz:
+            with open(core_txt, "rb") as src, lzma.open(core_final, "wb", preset=6) as dst:
+                for chunk in iter(lambda: src.read(1 << 20), b""):
+                    dst.write(chunk)
+        else:
+            os.replace(core_txt, core_final)
+        core = (core_name, "xz" if args.xz else "none", core_sha, n_core)
     payload_sha = sha256_file(payload_path)
     final = dest_dir / name
     if args.xz:
@@ -269,12 +409,14 @@ def main(argv=None) -> int:
     tmpdir.rmdir()
 
     block = proof_block(m, enc.digest, enc.num_vars, enc.num_clauses, name, args.format,
-                        "xz" if args.xz else "none", payload_sha)
+                        "xz" if args.xz else "none", payload_sha, core=core)
     new_text = body + block
     from heesch_verify.parse import parse_submission
     parse_submission(new_text)  # self-check: the block we wrote is grammatical
     shape_path.write_text(new_text, encoding="ascii", newline="\n")
-    print(f"wrote {final} ({final.stat().st_size} bytes) and the #PROOF block in {shape_path.name}")
+    print(f"wrote {final} ({final.stat().st_size} bytes)"
+          + (f" + {dest_dir / core[0]} ({(dest_dir / core[0]).stat().st_size} bytes)" if core else "")
+          + f" and the #PROOF block in {shape_path.name}")
     print(f"  m={m}: UNSAT F(S,{m}) => Hh <= {m - 1}"
           + (" — exact (m = hh + 1)" if m == hh + 1 else " — non-tiler certificate (lower bound stays)"))
 
