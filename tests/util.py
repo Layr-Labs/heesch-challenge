@@ -121,6 +121,9 @@ def checker_dir_for_tests(tmp_path) -> pathlib.Path | None:
         shim = d / "cake_lpr"
         shim.write_text(
             "#!/bin/sh\n# TEST SHIM: stands in for cake_lpr where it cannot be built.\n"
+            "# Drops the CakeML wrapper flags (--CML_HEAP_SIZE=/--CML_STACK_SIZE=)\n"
+            "# the harness passes, then runs lrat-check with the real arguments.\n"
+            "for a in \"$@\"; do case \"$a\" in --CML_*) shift;; *) break;; esac; done\n"
             f"'{d / 'lrat-check'}' \"$@\" | sed 's/^c VERIFIED$/s VERIFIED UNSAT/'\n"
         )
         shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)

@@ -80,6 +80,7 @@ jobs:
             uname -a
             python3 --version
             command -v bwrap && bwrap --version || echo "bubblewrap: absent"
+            nproc; free -m | head -2; df -h /tmp | tail -1
             git rev-parse HEAD
           } | tee benchmark-results/runner.txt
 
