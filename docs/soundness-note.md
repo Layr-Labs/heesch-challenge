@@ -1,169 +1,162 @@
-# Soundness note — heesch-encoder/v1
+# Soundness note — what a checked UNSAT proof establishes
 
-The encoder is the entire trust boundary of the exactness claim: a DRAT/LRAT
-proof certifies that one specific CNF is unsatisfiable, and nothing in the
-proof, the checker, or the solver says anything about whether that CNF
-faithfully encodes the geometry. This note states the obligations (encoder
-spec §7) with their arguments; each has a test in `tests/encoder/`.
+The encoder is the entire trust boundary of an exactness or non-tilerhood
+claim: a DRAT/LRAT proof certifies that one specific CNF is unsatisfiable,
+and nothing in the proof, the checker or the solver says anything about
+whether that CNF faithfully encodes the geometry. This note states the two
+theorems the repository relies on — one per encoder version — with their
+assumptions, and records the review status of each. Obligations are
+specified in `heesch-cnf-encoder-spec.md` §7 (E1–E8) and
+`heesch-multilevel-encoder-spec.md` §8 (M1–M9); each has a test under
+`tests/encoder/`.
 
-**Status: DRAFT — requires external review before the first record-tier
-promotion (spec §13.9). The ProofCarryingGate remains disabled until then.**
+**Status.** Encoder v2 is the enforced acceptance path (architecture §2.2/§13):
+its obligation suites are green and its theorem is stated below. What
+remains open is *external review* of the M1–M9 arguments for epoch 2 and a
+citable proof of E7; both gate record *announcements* (architecture §13.9),
+not scoring. Encoder v1 is not used for acceptance.
 
-## ⚠ E8 (found in implementation review): the per-patch quantifier gap
+## Theorem v1 (single-level; sound for exactness only at k = 0)
 
-**The spec's central inference is unsound as stated for k ≥ 1.** The formula
-`F(S, P_k)` (encoder spec §3.1) is parametrized by ONE submitted patch.
-UNSAT of `F` proves "this particular `P_k` admits no corona `k+1`" — but
-`Hh >= k+1` requires only that SOME hole-free k-patch extends, and patches
-are not interchangeable (corona search genuinely backtracks across patch
-choices; that is why heesch-sat encodes ALL levels in a single formula).
-So a checked UNSAT proof does NOT establish `Hh <= k`, and by the same
-argument does not establish non-tilerhood, except in one case:
+Let `S` be a hole-free tile, `P_k` a verified hole-free patch with coronas
+`0..k`, and `F(S, P_k)` the v1 formula (encoder spec §3–§4).
 
-- **k = 0 is sound**: `P_0` is the tile itself, unique up to the motions the
-  formula already quantifies over. UNSAT of `F(S, P_0)` proves `Hh = 0`.
+- UNSAT of `F(S, P_k)` ⇒ **this particular** `P_k` admits no hole-allowed
+  corona `k+1`.
+- For `k = 0`: `P_0 = S` is unique up to the motions the formula already
+  quantifies over, so UNSAT of `F(S, P_0)` ⇒ `Hh(S) = 0`, hence
+  `Hc = Hh = 0` and `S` is not a tiler.
+- For `k >= 1`: **no conclusion about `Hh(S)`.** `Hh >= k+1` requires only
+  that SOME hole-free `k`-patch extends, and patches are not interchangeable
+  (corona search genuinely backtracks across patch choices; that is why
+  heesch-sat encodes all levels in one formula). This is obligation E8, found
+  in implementation review; the old inference "UNSAT of `F(S, P_k)` ⇒
+  `Hh <= k` ⇒ `Hc = Hh = k`" is withdrawn for `k >= 1` and no longer appears
+  anywhere in the pipeline.
 
-Consequences until fixed:
-1. The ProofCarryingGate must not promote exactness records for k >= 1 from
-   single-level proofs. (It is already disabled wholesale.)
-2. The fix is a **multi-level encoder** — variables for placements at every
-   level 1..k+1 with level-adjacency constraints (touch level i−1, not
-   i−2), Kaplan-style — whose UNSAT genuinely quantifies over all patches.
-   **Fully specified in `heesch-multilevel-encoder-spec.md` (workspace root)
-   as heesch-encoder/v2**: weak-configuration relaxation (Hc <= Hh <= W),
-   obligations M1–M9, weak-gap measurement plan, feasibility gates, build
-   order. Budgeted as a project, not a patch.
-3. The witness/lower-bound path is entirely unaffected.
+Assumptions: E1 (universe completeness), E2 (equisatisfiability up to
+projection), E5 (one contact relation), E6 (deterministic regeneration).
+Continuity: `F_v2(S, 1) ≡ F_v1(S, P_0)` on the whole corpus (M8), so the
+`k = 0` case is also covered by v2.
 
-This is exactly the class of defect the external-review requirement exists
-to catch; it must be resolved in the spec before any exactness claim ships.
+## Theorem v2 (multilevel; the enforced path)
 
-### E8 resolution status (2026-08-07): heesch-encoder/v2 BUILT
+Let `S` be a hole-free tile, `m >= 1`, and `F(S, m)` the v2 formula
+(multilevel spec §5) over the placement universes `U_1..U_m` (§4).
 
-The multilevel encoder is implemented (`heesch_encoder/multilevel/`,
-epoch-2.json) per `heesch-multilevel-encoder-spec.md`, with all M-obligation
-suites green:
+> **UNSAT of `F(S, m)` ⇒ no weak `m`-configuration exists ⇒ no hole-allowed
+> `m`-corona patch exists around `S` for any choice of inner patches ⇒
+> `Hh(S) <= m - 1` ⇒ `S` is not a plane tiler.**
 
-- M1 per-level universe completeness: brute-force list equality across all
-  three grids (`test_ml_universe_m1.py`).
-- M3/M4/M6/M7: model↔geometry round trips against the hole-agnostic Stage 5
-  oracle, label-equality checks, geometric cross-counts, window-vs-family-5
-  structural test (`test_ml_roundtrip.py`).
-- M9 determinism: hash-seed-randomized subprocess goldens
-  (`test_ml_determinism.py`); §9.6 v1-continuity at m=1 over the whole
-  corpus (`test_ml_continuity.py`).
-- **§9.4 calibration: weak gap = 0/46.** Every corpus shape with known exact
-  Heesch values is UNSAT at F(S, k+1) — 46 machine-proven exactness
-  reproductions (docs/ml-weak-gap.md). B = 0 empirically suffices on all
-  measured real shapes.
-- Census results: the v2 encoder CLOSED the octomino-8 census (the last
-  non-tiler proven Hc=Hh=1 by F(S,2) UNSAT) and proved the three known
-  6-hex non-tilers exactly Hc=Hh=1. One 6-hex remains open: proven
-  non-tiler with W<=2 and Hc∈{1,2}, in tension with heesch-sat's README
-  example ("1 with Hc=2") — under arbitration by a current heesch-sat run
-  (see tests/corpus/MANIFEST.json).
-- Feasibility band measured and frozen in epoch-2 (docs/ml-feasibility.md).
+Combined with a verified witness (`Hc >= hc_verified`, `Hh >= hh_verified`):
+`m >= hh_verified + 1` is forced (`PROOF_LEVEL_INCONSISTENT` otherwise);
+with `m = hh_verified + 1`, `Hh = hh_verified` exactly; and if
+`hc_verified = hh_verified` then **`Hc = Hh = k` exactly**. If
+`hh = hc + 1`, `Hc ∈ {k, k+1}` remains undecided
+(`EXACT_UNDECIDED_HOLE_CASE`).
 
-**Still required before the first record-tier promotion: external review of
-this note and the M1–M9 arguments.** The ProofCarryingGate remains disabled;
-`check_proof_v2` is wired and negative-suite-tested.
+Assumptions (multilevel spec §8): M1 per-level universe completeness (the
+false-record obligation), M2 relaxation soundness (every real hole-allowed
+`m`-corona patch is a weak configuration), M4 geometry → model (every weak
+configuration satisfies `F` under the canonical auxiliary extension), M5
+equisatisfiability up to projection, and M9 determinism (the checked CNF is
+the one the server regenerates). M3/M6/M7 are consistency checks that make an
+encoder bug visible in the SAT direction; they are not needed for the UNSAT
+inference. E5 (one contact relation) holds for v2 by construction (the same
+`heesch_verify.patch` functions and the same threaded `Contact`).
 
-## The claim
+The relaxation is one-directional: a weak configuration need not be a real
+corona (holes, window slack), so SAT proves nothing about `Hh >= m` and is
+never treated as evidence. Calibration (multilevel spec §9.4,
+`docs/ml-weak-gap.md`): every corpus shape with known exact values is UNSAT
+at `F(S, k+1)` — 46/46, weak gap 0 — and the census closures (the last
+octomino, three 6-hex non-tilers) were obtained this way.
 
-For tile `S`, verified patch `P_k` (coronas 0..k, hole-free), and the formula
-`F(S, P_k)` produced by this encoder:
+## E1 — universe completeness (v1) / M1 (v2)
 
-- witness ⇒ `Hc >= k` (geometry verifier, architecture §7)
-- UNSAT of `F` ⇒ no hole-allowed corona `k+1` exists ⇒ `Hh <= k`
-- `Hc <= Hh` and (for non-tilers) `Hh <= Hc + 1` ⇒ **`Hc = Hh = k` exactly**,
-  and since a plane-tiler has coronas at every level, `S` is not a tiler.
+A legal corona-`(k+1)` copy `T·S` touches `P_k` under the frozen contact
+relation and does not overlap it, so some cell of `T·S` lies in
+`R = contact_neighbors(P_k) \ P_k`; the enumeration iterates every
+point-group element `M` and every pair (tile cell `c`, required cell `h`),
+forming `t = h - M(c)`, so that placement is generated and kept by the
+membership predicate. ∎ (v1: `test_universe_e1.py`, brute force with margin
+saturation.) For v2 the same argument is applied level by level: a level-`l`
+copy touches a level-`(l-1)` copy whose cellset is in the previous frontier
+by induction (`test_ml_universe_m1.py`).
 
-## E1 — universe completeness (the false-record obligation)
+## E2 / M5 — equisatisfiability up to projection
 
-**Claim.** `U` contains every legal corona-(k+1) placement.
+Auxiliaries are Sinz sequential-AMO variables, functionally determined by
+the `x` variables (`amo.aux_assignment` is the canonical extension
+`s_i = OR(x_1..x_i)`), so satisfiability is unchanged and the model ↔
+geometry correspondence is stated up to projection onto `x`
+(`test_amo_dimacs.py::test_sequential_amo_exact_model_count`).
 
-**Argument.** A legal corona-(k+1) copy `T·S` touches `P_k` under the frozen
-contact relation and does not overlap it. Touching without overlap means some
-cell of `T·S` is a contact-neighbour of a cell of `P_k` and not itself in
-`P_k`; that is, `cells(T·S) ∩ R ≠ ∅` where `R = contact_neighbors(P_k) \ P_k`.
-The enumeration (`placements.enumerate_universe`) iterates every point-group
-element `M` and every pair (tile cell `c`, required cell `h`), forming the
-translation `t = h − M(c)`. For the legal placement above, choose `c` with
-`M(c) + t ∈ R`: the pair (`c`, that R-cell) generates exactly `t`. Hence every
-legal placement is generated, then kept by the membership predicate
-(`in_universe`), which restates §3.1 verbatim. ∎
+## E3/E4 (v1), M3/M4 (v2) — the two directions
 
-No halo-radius arithmetic is involved — the enumeration is direct, so there
-is no off-by-one to get wrong. If `U` were incomplete, UNSAT would mean "no
-corona among the placements generated", which is not a theorem about the
-shape; this is the failure direction that produces false records. Tested by
-brute force over an oversized region with margin-band saturation
-(`test_universe_e1.py`).
-
-## E2 — equisatisfiability, up to projection
-
-`F`'s variables are `x_p` for `p ∈ U` plus, for cells whose cover exceeds the
-frozen AMO threshold (20), Sinz sequential auxiliaries. The auxiliaries are
-functionally determined by the `x` variables (`amo.aux_assignment` computes
-the canonical extension `s_i = OR(x_1..x_i)`), so `F` is satisfiable iff a
-legal hole-allowed corona exists, and the model ↔ geometry correspondence is
-stated **up to projection onto the `x` variables**. Tested:
-`test_amo_dimacs.py::test_sequential_amo_exact_model_count` (exact model
-counts per group) and the E3/E4 round trips.
-
-## E3 / E4 — the two directions
-
-- E3 (over-permissive detector): every SAT model projects to a placement set
-  the geometry verifier's standalone Stage 5 corona check accepts
-  (hole-allowed). `test_roundtrip.py::test_e3_*`.
-- E4 (over-restrictive detector — the false-record direction): every
-  oracle-legal corona satisfies `F` under the canonical aux extension,
-  checked with a pure-Python clause evaluator, no solver in the loop.
-  `test_roundtrip.py::test_e4_*`, including a geometric cross-count.
+Model → geometry: every SAT model decodes to a placement set the geometry
+oracle accepts (`hole_mode="none"`, multilevel spec §9.1) with recomputed
+levels equal to the labels. Geometry → model: every oracle-legal corona (v1)
+/ every enumerated weak configuration and every real corona (v2) satisfies
+`F` under the canonical aux extension, checked by a pure-Python clause
+evaluator with no solver in the loop, plus geometric cross-counts.
 
 ## E5 — one contact relation
 
-`R` and `touches` in the encoder ARE `heesch_verify.patch.required_set` and
-`heesch_verify.patch.touches`, called with the same threaded `Contact`
-object the verifier uses (architecture §11.1). There is no second adjacency
-implementation; `tests/test_contact_threading.py` and the AST lint enforce
-this structurally.
+`R` and `touches` in both encoders ARE `heesch_verify.patch.required_set` /
+`touches`, called with the same threaded `Contact` object the verifier uses
+(architecture §11.1). `tests/test_contact_threading.py` and the AST lint
+enforce this structurally.
 
-## E6 — deterministic regeneration
+## E6 / M9 — deterministic regeneration
 
-Byte-identical DIMACS across hosts, architectures, Python versions, and
-randomized `PYTHONHASHSEED` (the specific test that catches accidental set
-iteration). Canonical orders live only in `ordering.py`; the emission path
-passes an AST lint forbidding unordered iteration; fresh-subprocess digests
-against committed goldens run in the CI matrix. `test_determinism.py`,
-`test_no_unordered_iteration.py`, `test_epoch_freeze.py`.
+Byte-identical DIMACS across hosts, architectures, Python versions and
+randomized `PYTHONHASHSEED`; canonical orders live only in `ordering.py`; the
+emission path passes an AST lint forbidding unordered iteration; committed
+goldens (`tests/encoder/golden/`).
 
 ## E7 — `Hc <= Hh <= Hc + 1` for non-tilers
 
-`Hc <= Hh` is immediate (a hole-free corona is a hole-allowed corona).
-`Hh <= Hc + 1`: given a hole-allowed patch with coronas `1..m`, coronas
-`1..m−1` enclose no holes (holes are permitted only in the outermost layer),
-so the same patch truncated to `m−1` coronas is a hole-free witness, giving
-`Hc >= m − 1 = Hh − 1`.
+`Hc <= Hh` is immediate. `Hh <= Hc + 1`: a hole-allowed patch with coronas
+`1..m` has holes only in its outermost corona, so truncating it to `m-1`
+coronas is a hole-free witness, `Hc >= m - 1 = Hh - 1`. **Citation status:
+open.** The argument assumes the convention that only the outermost corona
+may enclose holes (architecture §11; Kaplan 2022 uses these definitions and
+observes `Hh ∈ {Hc, Hc+1}`). Before the first record announcement, either a
+citable proof is located or this argument is reviewed with the rest of this
+note (encoder spec §14 Q2). Nothing in scoring depends on E7: the harness
+records `hh_exact`/`exact` from the level rule alone.
 
-**Citation status: OPEN.** This one-line argument assumes the definitional
-convention that only the outermost corona may contain holes (architecture
-§11, matching Kaplan's `Hc`/`Hh`). Kaplan 2022 ("Heesch numbers of unmarked
-polyforms", arXiv:2105.09438) uses exactly these definitions and observes
-`Hh ∈ {Hc, Hc+1}`; before the first record promotion, either locate a citable
-statement with proof in the literature or have the argument above reviewed
-with the rest of this note (encoder spec §14 Q2).
+## E8 — the per-patch quantifier gap (v1)
 
-## Deliberately absent (spec §4.5)
+Stated under Theorem v1. Resolution: encoder v2 (built 2026-08-07, all
+M-suites green, feasibility band measured and frozen in epoch 2, and — since
+2026-08 — the enforced acceptance path with a submission channel,
+`ProofCarryingGate`, checker build in `setup.sh` and `tools/prove.py`).
 
-No symmetry breaking, no implied clauses, no preprocessing. Every one is an
+## Deliberately absent (encoder spec §4.5)
+
+No symmetry breaking, no implied clauses, no preprocessing — each is an
 opportunity to change the solution set; the solver's own preprocessing is
 covered by its proof.
 
 ## Frozen constants
 
-See `heesch_encoder/epoch/epoch-1.json`. Any change to the placement
-universe, variable ordering, clause schema, emission order, contact
-relation, or AMO threshold is `heesch-encoder/v2` and a new epoch: historical
-proofs stay valid against their recorded version, never re-checked against a
-new encoder, never silently migrated. Bug fixes are not exempt.
+`heesch_encoder/epoch/epoch-1.json`, `epoch-2.json`. Any change to the
+placement universe, variable ordering, clause schema, emission order,
+contact relation, AMO threshold, level window or weak bound is a new epoch:
+historical proofs stay valid against their recorded version, never re-checked
+against a new encoder, never silently migrated. Bug fixes are not exempt.
+
+## Census cross-check and the one open divergence
+
+Kaplan's complete non-tiler lists (`heesch_verify/known_nontilers.json`)
+carry the published exact `Hc/Hh` for 3 943 shapes; every corpus witness
+agrees. One shape is recorded as open: the 6-hex
+`-2 2 -1 1 0 0 1 0 2 0 2 1`, published `Hc = Hh = 2`. Our v2 formula
+`F(S, 3)` is UNSAT (so `Hh <= 2`, consistent) and `F(S, 2)` is SAT (a weak
+2-configuration exists), but neither the exact-cover classifier nor an
+enumeration of 200 000 `F(S, 2)` models (all with a hole in corona 2) has
+produced a hole-free 2-corona witness within budget. The census table keeps
+Kaplan's values; the harness would accept a 2-corona witness for it if one
+is submitted, and would reject anything deeper (`CENSUS_CONTRADICTION`).

@@ -7,11 +7,14 @@
 #      (environment does not persist between Yukon's setup and benchmark
 #      commands).
 #   3. Run `python -I -m harness.verify`. The harness executes NO competitor
-#      code — the submission is a plain-text shape file — but the file is
-#      hostile input to our own parser, so on Linux the verify stage runs
-#      under bubblewrap (read-only filesystem, no network, no capabilities,
+#      code — the submission is a plain-text shape file plus, optionally, a
+#      proof file — but both are hostile input to our own parser and to the
+#      vendored proof checkers, so on Linux the verify stage runs under
+#      bubblewrap (read-only filesystem, no network, no capabilities,
 #      writable only in a throwaway scratch dir) and on macOS under
-#      sandbox-exec. Defense in depth against parser-exploit classes; if no
+#      sandbox-exec. The checkers (tools/bin, built by setup.sh) run inside
+#      the same sandbox; HEESCH_CHECKER_DIR tells the harness where they are
+#      (it runs from the installed package, not the source tree). If no
 #      sandbox is available we warn and run unconfined (dev fallback).
 #   4. The harness writes score.json into the scratch dir
 #      (HEESCH_SCORE_DIR); it is copied to ./score.json only after success.
@@ -66,6 +69,7 @@ if command -v bwrap >/dev/null 2>&1; then
       --ro-bind "${root}" "${sandbox_repo}"
       --setenv TMPDIR "${scratch}"
       --setenv HEESCH_SCORE_DIR "${scratch}"
+      --setenv HEESCH_CHECKER_DIR "${sandbox_repo}/tools/bin"
       --setenv PYTHONHASHSEED 0
       --chdir "${sandbox_repo}"
       --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup
@@ -76,13 +80,15 @@ elif [[ "$(uname -s)" == "Darwin" ]] && command -v sandbox-exec >/dev/null 2>&1;
   profile="(version 1)(allow default)(deny network*)(deny file-write*)(allow file-write* (subpath \"${scratch}\"))(allow file-write* (subpath \"/dev\"))"
   run_verify=(
     sandbox-exec -p "${profile}"
-      /usr/bin/env TMPDIR="${scratch}" HEESCH_SCORE_DIR="${scratch}" PYTHONHASHSEED=0
+      /usr/bin/env TMPDIR="${scratch}" HEESCH_SCORE_DIR="${scratch}"
+      HEESCH_CHECKER_DIR="${root}/tools/bin" PYTHONHASHSEED=0
       "${vpy}" -I -m harness.verify
   )
 else
   echo "!! no sandbox available (bubblewrap/sandbox-exec); running verify UNCONFINED (dev fallback)" >&2
   run_verify=(
-    env TMPDIR="${scratch}" HEESCH_SCORE_DIR="${scratch}" PYTHONHASHSEED=0
+    env TMPDIR="${scratch}" HEESCH_SCORE_DIR="${scratch}"
+    HEESCH_CHECKER_DIR="${root}/tools/bin" PYTHONHASHSEED=0
     "${vpy}" -I -m harness.verify
   )
 fi

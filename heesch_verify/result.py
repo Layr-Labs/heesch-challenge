@@ -45,13 +45,18 @@ class ErrorCode(str, enum.Enum):
     DEFECT_TILE_OUT_OF_BAND = "DEFECT_TILE_OUT_OF_BAND"
     DEFECT_CLAIM_MISMATCH = "DEFECT_CLAIM_MISMATCH"
     DEFECT_LEVEL_MISMATCH = "DEFECT_LEVEL_MISMATCH"
-    # Gates
+    # Gates (§2.2 fail-closed rule) and the proof path (§13)
     GATE_IS_TILER = "GATE_IS_TILER"
     GATE_INCONCLUSIVE = "GATE_INCONCLUSIVE"
+    CENSUS_CONTRADICTION = "CENSUS_CONTRADICTION"
     GATE_PROOF_INVALID = "GATE_PROOF_INVALID"
     PROOF_CNF_DIGEST_MISMATCH = "PROOF_CNF_DIGEST_MISMATCH"
     PROOF_TRUNCATED = "PROOF_TRUNCATED"
     PROOF_HEADER_MISMATCH = "PROOF_HEADER_MISMATCH"
+    PROOF_LEVEL_INCONSISTENT = "PROOF_LEVEL_INCONSISTENT"
+    PROOF_FILE_INVALID = "PROOF_FILE_INVALID"
+    PROOF_FILE_DIGEST_MISMATCH = "PROOF_FILE_DIGEST_MISMATCH"
+    CHECKER_UNAVAILABLE = "CHECKER_UNAVAILABLE"
     # Store / resources
     DUPLICATE = "DUPLICATE"
     RESOURCE_EXCEEDED = "RESOURCE_EXCEEDED"
@@ -62,7 +67,6 @@ class Status(str, enum.Enum):
 
     PROMOTED = "PROMOTED"
     SUPERSEDED = "SUPERSEDED"
-    PENDING_GATE = "PENDING_GATE"
     EXACT_UNDECIDED_HOLE_CASE = "EXACT_UNDECIDED_HOLE_CASE"
 
 
@@ -109,6 +113,22 @@ class Result:
     defect_required: int = 0
     defect_pocket_cells: int = 0
     defect_partial_tiles: int = 0
+    # Non-tiler evidence (§2.2/§2.3): how non-tilerhood was established.
+    # `census` = Kaplan 2022 complete census (published exact Hc/Hh);
+    # `proof` = machine-checked UNSAT proof of F(S, m).
+    non_tiler_evidence: str = ""
+    tier: str = ""                 # "lower_bound" | "exact_proof"
+    census_hc: int | None = None
+    census_hh: int | None = None
+    proof_status: str = ""
+    proof_m: int = 0
+    proof_cnf_digest: str = ""
+    proof_sha256: str = ""
+    proof_format: str = ""
+    proof_checkers: tuple = ()
+    hh_exact: bool = False         # Hh established exactly (= hh_verified)
+    exact: bool = False            # Hc = Hh = hc_verified established exactly
+    record_eligible: bool = False  # exact, proof-backed, hc_verified >= 5
     # Frozen conventions (§11) written into every record.
     conventions: dict = field(default_factory=dict)
 
@@ -137,6 +157,19 @@ class Result:
             "defect_required": self.defect_required,
             "defect_pocket_cells": self.defect_pocket_cells,
             "defect_partial_tiles": self.defect_partial_tiles,
+            "non_tiler_evidence": self.non_tiler_evidence,
+            "tier": self.tier,
+            "census_hc": self.census_hc,
+            "census_hh": self.census_hh,
+            "proof_status": self.proof_status,
+            "proof_m": self.proof_m,
+            "proof_cnf_digest": self.proof_cnf_digest,
+            "proof_sha256": self.proof_sha256,
+            "proof_format": self.proof_format,
+            "proof_checkers": list(self.proof_checkers),
+            "hh_exact": self.hh_exact,
+            "exact": self.exact,
+            "record_eligible": self.record_eligible,
             "conventions": dict(self.conventions),
         }
         return out

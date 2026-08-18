@@ -19,6 +19,7 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools"))
 
 from pysat.solvers import Solver  # noqa: E402
 
@@ -39,34 +40,7 @@ SHAPE_BUDGET_S = 120.0
 
 # ---------------------------------------------------------------- enumeration
 
-def free_polyforms(grid_id: str, n: int):
-    """All free n-cell polyforms on the grid (holed ones included), deduped
-    by canonical form. Growth via edge adjacency is grid-generic."""
-    grid = GRIDS[grid_id]
-    seen = set()
-    out = []
-
-    def grow(cells: frozenset, frontier):
-        if len(cells) == n:
-            key = canonical_form(cells, grid, allow_reflections=True)
-            if key not in seen:
-                seen.add(key)
-                out.append(key)
-            return
-        for c in sorted(frontier):
-            for nb in grid.edge_neighbors(c):
-                if nb in cells:
-                    continue
-                new = cells | {nb}
-                key = tuple(sorted(new))
-                if key in visited_partial:
-                    continue
-                visited_partial.add(key)
-                grow(frozenset(new), sorted(new))
-
-    visited_partial: set = set()
-    grow(frozenset([(0, 0)]), [(0, 0)])
-    return out
+from polyforms import free_polyforms  # noqa: E402,F401  (shared enumerator)
 
 
 # ---------------------------------------------------------------- search

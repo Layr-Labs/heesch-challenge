@@ -32,7 +32,7 @@ def literal_key(lit: int) -> tuple:
 
 
 def xvar_key(level: int, p) -> tuple:
-    """v2 (multilevel spec §6): level-major x-variable order —
+    """v2 (multilevel spec §5, emission §6): level-major x-variable order —
     (l, symmetry_index, ty, tx). Additive to the v1 orders; epoch-1 is
     untouched."""
     return (level,) + placement_key(p)

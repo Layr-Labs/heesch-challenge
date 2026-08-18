@@ -1,6 +1,7 @@
 """F1-F5 regression (2026-08 audit deep sweep, docs/VULN-REVIEW.md). The
-record-tier proof pipeline is gated (ProofCarryingGate.ENABLED = False), so
-these are launch blockers, not live exploits — but the code paths are real.
+record-tier proof pipeline is now the ENFORCED acceptance path for every
+out-of-census submission (heesch_verify.proofgate.ProofCarryingGate,
+architecture §2.2), so these are live invariants.
 
 F1/F2: a RECORD must rest on the formally-verified checker (cake_lpr). The old
        code substituted lrat-check when cake_lpr was absent; lrat-check is not

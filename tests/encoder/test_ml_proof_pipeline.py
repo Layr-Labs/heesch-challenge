@@ -101,3 +101,37 @@ def test_v2_real_unsat_proof_verifies(tmp_path):
     sub = ProofSubmission(str(proof), enc.digest, enc.num_vars, enc.num_clauses)
     out = check_proof_v2(sub, tile, grid, contact, 2, Tier.TRIAGE)
     assert out.status is ProofStatus.VERIFIED, out.detail
+
+
+def test_v2_out_of_band_rejects_before_encoding(tmp_path, monkeypatch):
+    """Epoch-2 feasibility band (multilevel spec §10.2) is enforced by
+    policy BEFORE any encoding work starts."""
+    import heesch_encoder.multilevel.api as mlapi
+
+    called = []
+    monkeypatch.setattr(mlapi, "encode_multilevel",
+                        lambda *a, **k: called.append(1) or (_ for _ in ()).throw(AssertionError))
+    tile = frozenset((x, y) for x in range(10) for y in range(6))  # 60 cells
+    grid = _unsat_octomino()[1]
+    proof = tmp_path / "p.drat"
+    proof.write_bytes(b"0\n")
+    out = check_proof_v2(ProofSubmission(str(proof), "0" * 64, 1, 1), tile, grid,
+                         grid.contact("point"), 4, Tier.RECORD)
+    assert out.status is ProofStatus.RESOURCE_EXCEEDED
+    assert "feasibility band" in out.detail
+    assert not called
+
+
+def test_explicit_bin_dir_missing_is_checker_missing(tmp_path):
+    r = ck.drat_trim("x.cnf", "p.drat", bin_dir=tmp_path / "nowhere")
+    assert r.status is ck.CheckStatus.CHECKER_MISSING
+    assert str(tmp_path / "nowhere") in r.detail
+
+
+def test_budget_exhausted_does_not_spawn(tmp_path):
+    b = ck.CheckBudget(deadline_seconds=0.0)
+    d = tmp_path
+    ck.checker_path("drat-trim", d).write_text("")  # .exe on Windows
+    r = ck.drat_trim("x.cnf", "p.drat", bin_dir=d, budget=b)
+    assert r.status is ck.CheckStatus.RESOURCE_EXCEEDED
+    assert "deadline" in r.detail

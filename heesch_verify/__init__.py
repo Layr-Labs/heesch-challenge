@@ -2,7 +2,7 @@
 
 The witness path (this package minus gates.py) is stdlib-only and side-effect
 free: agents import it and call `verify_witness` in their inner search loop;
-identical code runs server-side. See heesch-verifier-architecture.md.
+identical code runs server-side. See docs/heesch-verifier-architecture.md.
 """
 
 from .canonical import canonical_digest, canonical_form, symmetry_order

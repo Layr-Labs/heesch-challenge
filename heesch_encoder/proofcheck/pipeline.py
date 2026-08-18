@@ -8,8 +8,16 @@
 6. Dispatch to checkers; record tier requires TWO independent VERIFIED
    verdicts (a formally verified checker plus drat-trim/lrat-check).
 
-UNSAT verified  =>  no hole-allowed corona k+1 exists  =>  Hh <= k, and with
-the witness (Hc >= k): Hc = Hh = k exactly, and the shape is not a tiler.
+Two encoders feed the same steps 2-6:
+
+* v1 `check_proof` — F_v1(S, P_k), one submitted patch. UNSAT there proves
+  only that THAT patch has no hole-allowed corona k+1; the inference to
+  Hh <= k is sound only at k = 0 (docs/soundness-note.md, E8).
+* v2 `check_proof_v2` — the multilevel F(S, m). UNSAT verified means no weak
+  m-configuration exists over ALL patches, so Hh <= m-1 and the shape is not
+  a tiler; with a verified witness hh = m-1 the value is exact (multilevel
+  spec §2.2). This is the path the harness enforces (arch §2.2/§13).
+
 A SAT outcome is EXACT_UNDECIDED_HOLE_CASE — an honest "not yet", never
 shown as a failure (spec §5).
 """
@@ -113,20 +121,33 @@ def check_proof(sub: ProofSubmission, tile_cells, patch_cells, grid, contact,
 
 
 def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
-                   tier: Tier = Tier.RECORD, timeout: float = 3600.0) -> ProofOutcome:
+                   tier: Tier = Tier.RECORD, timeout: float = 3600.0,
+                   bin_dir=None, budget=None) -> ProofOutcome:
     """v2 path: regenerate the multilevel F(S, m) then the same frozen
     steps. UNSAT verified here means no weak m-configuration exists —
-    Hh <= m-1 over ALL patches (multilevel spec §2.2)."""
-    from ..multilevel.api import encode_multilevel
+    Hh <= m-1 over ALL patches (multilevel spec §2.2).
 
+    The epoch-2 feasibility band (multilevel spec §10.2) is enforced BEFORE
+    encoding: outside it the answer is RESOURCE_EXCEEDED by policy, so the
+    server never starts an encoding it cannot finish."""
+    from ..multilevel.api import encode_multilevel, in_feasibility_band
+
+    n_cells = len(frozenset(tile_cells))
+    if not in_feasibility_band(n_cells, m):
+        return ProofOutcome(
+            ProofStatus.RESOURCE_EXCEEDED,
+            f"({n_cells} cells, m={m}) is outside the epoch-2 feasibility band",
+        )
     enc = encode_multilevel(tile_cells, grid, contact, m)
-    return check_proof_encoded(sub, enc, tier=tier, timeout=timeout)
+    return check_proof_encoded(sub, enc, tier=tier, timeout=timeout,
+                               bin_dir=bin_dir, budget=budget)
 
 
 def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
-                        timeout: float = 3600.0) -> ProofOutcome:
+                        timeout: float = 3600.0, bin_dir=None, budget=None) -> ProofOutcome:
     """Steps 2-6 of the frozen order, schema-blind: works for any encoding
-    object exposing digest/num_vars/num_clauses/dimacs."""
+    object exposing digest/num_vars/num_clauses/dimacs. `bin_dir` locates the
+    checker binaries (see checkers._BIN); `budget` is a checkers.CheckBudget."""
     # 2. Digest match before touching the proof.
     if enc.digest != sub.claimed_cnf_digest:
         return ProofOutcome(
@@ -195,23 +216,28 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
         if fmt in (ProofFormat.DRAT_TEXT, ProofFormat.DRAT_BINARY):
             lrat_out = os.path.join(td, "converted.lrat")
             r1 = ck.drat_trim(cnf_path, sub.proof_path, emit_lrat=lrat_out,
-                              timeout=timeout)
+                              timeout=timeout, bin_dir=bin_dir, budget=budget)
             results.append(r1)
             if tier is Tier.RECORD and r1.status is ck.CheckStatus.VERIFIED:
                 # Formally-verified slot: cake_lpr only, over the LRAT drat-trim
                 # emitted. No lrat-check fallback.
-                results.append(ck.cake_lpr(cnf_path, lrat_out, timeout=timeout))
+                results.append(ck.cake_lpr(cnf_path, lrat_out, timeout=timeout,
+                                           bin_dir=bin_dir, budget=budget))
         elif tier is Tier.RECORD:  # LRAT_TEXT, record tier
             # cake_lpr is the formally-verified primary; lrat-check backs it as
             # the second independent verdict only after cake_lpr VERIFIED.
-            r_fv = ck.cake_lpr(cnf_path, sub.proof_path, timeout=timeout)
+            r_fv = ck.cake_lpr(cnf_path, sub.proof_path, timeout=timeout,
+                               bin_dir=bin_dir, budget=budget)
             results.append(r_fv)
             if r_fv.status is ck.CheckStatus.VERIFIED:
-                results.append(ck.lrat_check(cnf_path, sub.proof_path, timeout=timeout))
+                results.append(ck.lrat_check(cnf_path, sub.proof_path, timeout=timeout,
+                                             bin_dir=bin_dir, budget=budget))
         else:  # LRAT_TEXT, triage tier — any available checker suffices
-            r1 = ck.cake_lpr(cnf_path, sub.proof_path, timeout=timeout)
+            r1 = ck.cake_lpr(cnf_path, sub.proof_path, timeout=timeout,
+                             bin_dir=bin_dir, budget=budget)
             if r1.status is ck.CheckStatus.CHECKER_MISSING:
-                r1 = ck.lrat_check(cnf_path, sub.proof_path, timeout=timeout)
+                r1 = ck.lrat_check(cnf_path, sub.proof_path, timeout=timeout,
+                                   bin_dir=bin_dir, budget=budget)
             results.append(r1)
 
     seconds = sum(r.seconds for r in results)

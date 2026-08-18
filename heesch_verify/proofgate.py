@@ -1,0 +1,327 @@
+"""Gate 3 — the proof-carrying non-tiler gate (architecture §2.3, §13).
+
+A submission whose shape is outside the census can only score by carrying a
+machine-checked UNSAT proof of the multilevel formula F(S, m) (encoder v2).
+UNSAT of F(S, m) means no weak m-configuration exists over ALL patches, so
+Hh <= m-1 and the shape is not a plane tiler; with a verified witness of
+hh = m-1 the value is exact (multilevel spec §2.2). This module turns the
+`#PROOF` block of a parsed submission into an enforced verdict:
+
+  1. level rule        m >= hh_verified + 1, else PROOF_LEVEL_INCONSISTENT
+                       (a witness deeper than the proof allows is a
+                       contradiction — never scored, never "fixed up")
+  2. checker preflight all three vendored checkers present, else
+                       CHECKER_UNAVAILABLE (fail closed; never a downgrade)
+  3. bands             harness band and epoch-2 band, else RESOURCE_EXCEEDED
+  4. proof file        regular file inside submission/, size caps, optional
+                       xz with bounded decompression, sha256 verified before
+                       any checker sees a byte
+  5. check_proof_v2    regenerate F(S, m), digest/header match, sniff, then
+                       RECORD tier: two independent VERIFIED verdicts, one of
+                       them cake_lpr (formally verified)
+
+Never imported by witness.py or anything it imports; heesch_encoder is
+imported lazily inside check() so the lower-bound path stays independent.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import hashlib
+import lzma
+import os
+import pathlib
+import shutil
+import stat
+import tempfile
+
+from .canonical import canonical_form
+from .result import ErrorCode
+
+# On-disk cap for the proof file as submitted (plain or .xz) and the cap on
+# the decompressed payload the checkers read. Coupled to benchmark.json's
+# maxSubmissionBytes (64 MiB): best.heesch (<= 2 MiB) + proof must fit.
+PROOF_MAX_STORED_BYTES = 48 * 1024 * 1024
+PROOF_MAX_PAYLOAD_BYTES = 256 * 1024 * 1024
+_XZ_MEMLIMIT = 256 * 1024 * 1024
+_CHUNK = 1024 * 1024
+
+# In-harness proof band (cells, max m): the epoch-2 band minus its two
+# heaviest cells ((50, 4) and (200, 2)), because the harness must ENCODE
+# F(S, m) inside the benchmark job as well as check it. (<= 20, 5) admits
+# the exactness proof of every known Hc = 4 shape (11-20 cells): F(S,5)
+# encodes in ~1 min (11-hex, 1.0 GB DIMACS) to ~3 min (20-iamond, 2.1 GB).
+# A record claim hc >= 5 needs F(S,6), outside the epoch-2 band — see
+# docs/heesch-multilevel-encoder-spec.md §10.2. Measured in
+# docs/ml-feasibility.md.
+HARNESS_PROOF_BAND = ((20, 5), (50, 3), (100, 2))
+# Wall-clock guard around the encoding step (the checkers have their own
+# CheckBudget); exceeding it is RESOURCE_EXCEEDED, never a crash.
+ENCODE_TIMEOUT_S = 600
+
+CHECKER_NAMES = ("drat-trim", "lrat-check", "cake_lpr")
+
+
+def in_harness_band(n_cells: int, m: int) -> bool:
+    for max_cells, max_m in HARNESS_PROOF_BAND:
+        if n_cells <= max_cells:
+            return 1 <= m <= max_m
+    return False
+
+
+@dataclasses.dataclass(frozen=True)
+class ProofVerdict:
+    code: ErrorCode | None      # None == VERIFIED
+    detail: str
+    m: int = 0
+    cnf_digest: str = ""
+    proof_sha256: str = ""
+    fmt: str = ""
+    checkers_verified: tuple = ()
+    hh_exact: bool = False
+    exact: bool = False
+
+    def to_json(self) -> dict:
+        return {
+            "status": "VERIFIED" if self.code is None else self.code.value,
+            "detail": self.detail,
+            "m": self.m,
+            "cnf_digest": self.cnf_digest,
+            "proof_sha256": self.proof_sha256,
+            "format": self.fmt,
+            "checkers_verified": list(self.checkers_verified),
+            "hh_exact": self.hh_exact,
+            "exact": self.exact,
+        }
+
+
+class _EncodeTimeout(Exception):
+    pass
+
+
+class _encode_alarm:
+    """SIGALRM-based wall-clock guard where available (POSIX main thread);
+    a no-op elsewhere. The checkers subtract their own elapsed time via
+    CheckBudget, so this bounds the Python encoding step above all."""
+
+    def __init__(self, seconds: int):
+        self.seconds = seconds
+        self.armed = False
+
+    def __enter__(self):
+        import signal
+        import threading
+
+        if hasattr(signal, "SIGALRM") and threading.current_thread() is threading.main_thread():
+            def handler(signum, frame):
+                raise _EncodeTimeout()
+            self._old = signal.signal(signal.SIGALRM, handler)
+            signal.alarm(self.seconds)
+            self.armed = True
+        return self
+
+    def __exit__(self, *exc):
+        if self.armed:
+            import signal
+
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, self._old)
+        return False
+
+
+class ProofFileError(Exception):
+    def __init__(self, code: ErrorCode, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+def _open_regular(path: pathlib.Path) -> int:
+    """Open a submission-side file refusing symlinks and non-regular files
+    (the same discipline harness/verify.py applies to best.heesch)."""
+    try:
+        st = os.lstat(path)
+    except OSError as e:
+        raise ProofFileError(ErrorCode.PROOF_FILE_INVALID, f"cannot stat proof file: {e}")
+    if not stat.S_ISREG(st.st_mode):
+        raise ProofFileError(ErrorCode.PROOF_FILE_INVALID, "proof file is not a regular file")
+    flags = (os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+             | getattr(os, "O_BINARY", 0))
+    try:
+        fd = os.open(path, flags)
+    except OSError as e:
+        raise ProofFileError(ErrorCode.PROOF_FILE_INVALID, f"cannot open proof file: {e}")
+    fst = os.fstat(fd)
+    if not stat.S_ISREG(fst.st_mode) or (fst.st_dev, fst.st_ino) != (st.st_dev, st.st_ino):
+        os.close(fd)
+        raise ProofFileError(ErrorCode.PROOF_FILE_INVALID, "proof file changed under us")
+    return fd
+
+
+def materialize_proof(src: pathlib.Path, dst: pathlib.Path, compression: str) -> tuple[int, str]:
+    """Stream the submitted proof into `dst` (decompressing xz with a bounded
+    output), returning (payload_bytes, payload_sha256). Raises ProofFileError."""
+    fd = _open_regular(src)
+    with os.fdopen(fd, "rb", closefd=True) as fh:
+        size = os.fstat(fh.fileno()).st_size
+        if size > PROOF_MAX_STORED_BYTES:
+            raise ProofFileError(
+                ErrorCode.RESOURCE_EXCEEDED,
+                f"proof file is {size} bytes (cap {PROOF_MAX_STORED_BYTES})",
+            )
+        h = hashlib.sha256()
+        total = 0
+        with open(dst, "wb") as out:
+            if compression == "none":
+                while True:
+                    chunk = fh.read(_CHUNK)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > PROOF_MAX_PAYLOAD_BYTES:
+                        raise ProofFileError(
+                            ErrorCode.RESOURCE_EXCEEDED,
+                            f"proof payload exceeds {PROOF_MAX_PAYLOAD_BYTES} bytes",
+                        )
+                    h.update(chunk)
+                    out.write(chunk)
+            else:
+                dec = lzma.LZMADecompressor(format=lzma.FORMAT_XZ, memlimit=_XZ_MEMLIMIT)
+                try:
+                    while True:
+                        chunk = fh.read(_CHUNK)
+                        if not chunk and dec.needs_input:
+                            break
+                        data = dec.decompress(chunk, max_length=_CHUNK)
+                        while True:
+                            total += len(data)
+                            if total > PROOF_MAX_PAYLOAD_BYTES:
+                                raise ProofFileError(
+                                    ErrorCode.RESOURCE_EXCEEDED,
+                                    f"decompressed proof exceeds {PROOF_MAX_PAYLOAD_BYTES} bytes",
+                                )
+                            h.update(data)
+                            out.write(data)
+                            if dec.needs_input or dec.eof:
+                                break
+                            data = dec.decompress(b"", max_length=_CHUNK)
+                        if dec.eof:
+                            break
+                except lzma.LZMAError as e:
+                    raise ProofFileError(ErrorCode.PROOF_FILE_INVALID, f"xz: {e}")
+                if not dec.eof:
+                    raise ProofFileError(ErrorCode.PROOF_FILE_INVALID, "xz stream truncated")
+                if dec.unused_data or fh.read(1):
+                    raise ProofFileError(ErrorCode.PROOF_FILE_INVALID,
+                                         "trailing data after the xz stream")
+    return total, h.hexdigest()
+
+
+class ProofCarryingGate:
+    """Enforced non-tiler proof gate. `submission_dir` is the directory that
+    holds best.heesch and the proof file it names; `checker_dir` holds the
+    vendored checker binaries."""
+
+    def __init__(self, submission_dir, checker_dir, budget=None):
+        self.submission_dir = pathlib.Path(submission_dir)
+        self.checker_dir = pathlib.Path(checker_dir)
+        self.budget = budget
+
+    def missing_checkers(self) -> list[str]:
+        missing = []
+        for name in CHECKER_NAMES:
+            exe = self.checker_dir / (name + (".exe" if os.name == "nt" else ""))
+            try:
+                if not stat.S_ISREG(os.stat(exe).st_mode):
+                    missing.append(name)
+            except OSError:
+                missing.append(name)
+        return missing
+
+    def check(self, sub, outcome) -> ProofVerdict:
+        block = sub.proof
+        hc, hh = outcome.result.hc_verified, outcome.result.hh_verified
+        m = block.m
+        # 1. Level rule.
+        if m < hh + 1:
+            return ProofVerdict(
+                ErrorCode.PROOF_LEVEL_INCONSISTENT,
+                f"F(S,{m}) UNSAT would give Hh <= {m - 1} but the witness verifies "
+                f"hh = {hh}; the proof must be for m >= {hh + 1}",
+                m=m,
+            )
+        hh_exact = (m - 1 == hh)
+        exact = hh_exact and hc == hh
+        # 2. Checker preflight — fail closed before touching the proof.
+        missing = self.missing_checkers()
+        if missing:
+            return ProofVerdict(
+                ErrorCode.CHECKER_UNAVAILABLE,
+                "proof checkers not available: " + ", ".join(missing)
+                + f" (looked in {self.checker_dir})",
+                m=m,
+            )
+        # 3. Bands.
+        n_cells = len(sub.cells)
+        if not in_harness_band(n_cells, m):
+            return ProofVerdict(
+                ErrorCode.RESOURCE_EXCEEDED,
+                f"({n_cells} cells, m={m}) is outside the in-harness proof band "
+                f"{HARNESS_PROOF_BAND}",
+                m=m,
+            )
+        # 4. Materialize the proof file into scratch.
+        src = self.submission_dir / block.file_name
+        scratch = pathlib.Path(tempfile.mkdtemp(prefix="heesch-proof-"))
+        try:
+            dst = scratch / f"proof.{block.fmt}"
+            try:
+                _, payload_sha = materialize_proof(src, dst, block.compression)
+            except ProofFileError as e:
+                return ProofVerdict(e.code, e.message, m=m)
+            if payload_sha != block.payload_sha256:
+                return ProofVerdict(
+                    ErrorCode.PROOF_FILE_DIGEST_MISMATCH,
+                    f"proof payload sha256 {payload_sha[:16]}… != declared "
+                    f"{block.payload_sha256[:16]}…",
+                    m=m,
+                )
+            # 5. Regenerate F(S, m) and run the frozen check order.
+            from heesch_encoder.proofcheck.pipeline import (
+                ProofStatus, ProofSubmission, Tier, check_proof_v2,
+            )
+
+            psub = ProofSubmission(
+                proof_path=str(dst),
+                claimed_cnf_digest=block.cnf_digest,
+                claimed_vars=block.num_vars,
+                claimed_clauses=block.num_clauses,
+            )
+            tile = frozenset(canonical_form(sub.cells, sub.grid, True))
+            try:
+                with _encode_alarm(ENCODE_TIMEOUT_S):
+                    out = check_proof_v2(
+                        psub, tile, sub.grid, outcome.contact, m,
+                        tier=Tier.RECORD, bin_dir=self.checker_dir, budget=self.budget,
+                    )
+            except _EncodeTimeout:
+                return ProofVerdict(
+                    ErrorCode.RESOURCE_EXCEEDED,
+                    f"encoding/checking F(S,{m}) exceeded {ENCODE_TIMEOUT_S} s", m=m,
+                )
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+
+        if out.status is not ProofStatus.VERIFIED:
+            return ProofVerdict(
+                ErrorCode(out.status.value), out.detail, m=m,
+                cnf_digest=out.cnf_digest, proof_sha256=payload_sha, fmt=block.fmt,
+            )
+        verified = tuple(sorted(
+            r.checker for r in out.checker_results if r.status.value == "VERIFIED"
+        ))
+        return ProofVerdict(
+            None, out.detail, m=m, cnf_digest=out.cnf_digest,
+            proof_sha256=payload_sha, fmt=block.fmt, checkers_verified=verified,
+            hh_exact=hh_exact, exact=exact,
+        )

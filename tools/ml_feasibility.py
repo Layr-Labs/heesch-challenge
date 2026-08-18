@@ -1,4 +1,4 @@
-"""v2 feasibility table (spec §10.2): variable/clause COUNTS for F(S, m)
+"""v2 feasibility table (multilevel spec §10.2): variable/clause COUNTS for F(S, m)
 without building clause objects. This is the Phase B gate — the published
 (cells, m) band decision comes from this table.
 
@@ -132,7 +132,7 @@ def main():
                 break
 
     lines = [
-        "# v2 feasibility table (spec §10.2)", "",
+        "# v2 feasibility table (multilevel spec §10.2)", "",
         "Counts from universes alone — no clause objects. DNF = row budget "
         f"({ROW_BUDGET_S:.0f}s) or memory exceeded.", "",
         "| shape | grid | cells | m | u_l | vars | f1 | f2 | f4 | f5 | f6 | clauses | secs |",

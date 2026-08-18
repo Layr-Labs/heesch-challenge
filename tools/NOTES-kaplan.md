@@ -112,7 +112,8 @@ N                              # patch size (placement count)
   union) vs `adjacent_hole_` (pair encloses a hole). For the outermost corona
   under Hc it forbids hole-adjacencies, and iteratively excludes larger
   multi-tile holes on SAT models (CEGAR). This is exactly the loop our encoder
-  spec §5 avoids by encoding Hh only. Our geometric witness checker checks holes
+  (v1 spec §4 clauses; multilevel spec §2.1 weak configurations) avoids by
+  encoding hole-allowed coronas only. Our geometric witness checker checks holes
   directly by flood fill — no pairwise approximation needed.
 - `surroundable_ = false` when some halo cell admits no legal placement ⇒ Hc=0
   immediately (mirrors our "empty coverage clause" case, encoder spec §4.3).

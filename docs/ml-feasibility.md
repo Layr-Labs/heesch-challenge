@@ -1,4 +1,4 @@
-# v2 feasibility table (spec §10.2)
+# v2 feasibility table (multilevel spec §10.2)
 
 Counts from universes alone — no clause objects. DNF = row budget (120s) or memory exceeded.
 
@@ -106,3 +106,33 @@ Counts from universes alone — no clause objects. DNF = row budget (120s) or me
 | square10 | O | 100 | 5 | DNF | | | | | | | | |
 | rect10x20 | O | 200 | 2 | 960/29440 | 6101676 | 64 | 18214864 | 29440 | 0 | 53312 | 18297680 | 436.2 |
 | rect10x20 | O | 200 | 3 | DNF | | | | | | | | |
+
+## In-harness proof band (2026-08-17)
+
+The harness must *encode* `F(S, m)` inside the benchmark job before it can
+check a proof, so `heesch_verify.proofgate.HARNESS_PROOF_BAND` is the
+epoch-2 band minus its two heaviest cells: `(<= 20 cells, m <= 5)`,
+`(<= 50, m <= 3)`, `(<= 100, m <= 2)`. Real `encode_multilevel` timings
+(Apple M-series laptop, single core), which is what the runner spends before
+the checkers even start:
+
+| shape | cells | m | vars | clauses | encode s | DIMACS |
+|---|---|---|---|---|---|---|
+| 12×1 bar | 12 | 4 | 749 418 | 5 373 274 | 29.0 | 892 MB |
+| 4×3 rectangle | 12 | 4 | 169 250 | 927 558 | 4.5 | 111 MB |
+| 10×2 rectangle | 20 | 3 | 428 880 | 1 515 052 | 9.8 | 239 MB |
+| 5×4 rectangle | 20 | 3 | 185 288 | 661 102 | 3.6 | 77 MB |
+| 25×2 rectangle | 50 | 2 | 1 334 328 | 4 004 234 | 19.3 | 142 MB |
+| 10×5 rectangle | 50 | 2 | 403 646 | 1 228 670 | 5.8 | 40 MB |
+| Kaplan Hc=4 11-hex | 11 | 5 | 561 357 | 6 867 895 | 60 | 0.99 GB |
+| Kaplan Hc=4 20-iamond | 20 | 5 | 1 272 828 | 11 038 715 | 173 | 2.05 GB |
+
+The 11-hex `F(S,5)` is UNSAT in ~30 s (cadical153) and `F(S,4)` SAT in ~8 s
+— the exactness proof of a record-class shape is producible and checkable
+today. `F(S,6)` (needed for any Hc ≥ 5 claim) is outside the epoch-2 band.
+
+Elongated shapes are the worst case (long boundaries → large universes).
+Checker time on the resulting instances is bounded separately
+(`CheckBudget`: drat-trim 540 s, cake_lpr 420 s, lrat-check 180 s, 1200 s
+overall); an honest proof that does not fit is `RESOURCE_EXCEEDED`, never
+scored and never silently accepted.
