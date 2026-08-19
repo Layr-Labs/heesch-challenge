@@ -226,4 +226,8 @@ window `{l-1,l,l+1}`, universe construction `reachability-bfs/v1`, variable
 order, clause emission order, the feasibility band, and the constants digest;
 sha256-pinned by `test_revision_freeze.py`. Any change is revision 3. The
 `checkers.record_tier_policy` string in the manifest is documentary and
-superseded by the enforced code policy (v1 spec §11).
+superseded by the enforced code policy (v1 spec §11); the corrected
+provenance — the enforced checker policy and the current measured band —
+is `heesch_encoder/revisions/rev-2-addendum.json`, checked against the
+code by `test_revision_freeze.py::test_rev2_addendum_matches_code` (the
+frozen manifest stays byte-identical).

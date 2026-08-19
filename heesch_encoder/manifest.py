@@ -46,6 +46,16 @@ def load_revision(n: int = 1) -> dict:
     return json.loads((REVISIONS_DIR / f"rev-{n}.json").read_text(encoding="utf-8"))
 
 
+def load_revision_addendum(n: int) -> dict | None:
+    """Corrections to DOCUMENTARY fields of an immutable manifest (never to a
+    frozen constant): `rev-<n>-addendum.json`, or None. The addendum is
+    checked against the live code by test_revision_freeze.py."""
+    p = REVISIONS_DIR / f"rev-{n}-addendum.json"
+    if not p.exists():
+        return None
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
 def live_constants_v2() -> dict:
     """v2 frozen constants (multilevel spec §11). NEVER fold these into
     live_constants(): its digest is pinned by the immutable revision-1

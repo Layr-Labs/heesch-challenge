@@ -146,7 +146,8 @@ migrated; bug fixes are not exempt. The manifest's `checkers.record_tier_policy`
 string (`cake_lpr-or-lrat-check`) predates audit F2 and is documentary only:
 the enforced policy is the code's (§8 step 6, architecture §13.4) — `cake_lpr`
 required, `lrat-check` never a substitute. The manifest is left byte-identical
-because it is immutable by construction; this note is the correction.
+because it is immutable by construction; this note and
+`heesch_encoder/revisions/rev-2-addendum.json` (code-checked) are the correction.
 
 Naming note (2026-08-18): the frozen-constants versions were previously
 called "epochs" (`heesch_encoder/epoch/epoch-N.json`, manifest key `epoch`).

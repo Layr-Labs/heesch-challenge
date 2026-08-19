@@ -81,3 +81,29 @@ def test_golden_digests_present_and_stable():
     # here just pin that the golden file itself is tracked and non-empty.
     for name, digest in goldens.items():
         assert len(digest) == 64, f"{name}: malformed digest"
+
+
+def test_rev2_addendum_matches_code():
+    """Audit 2026-08-19 Low 12: rev-2.json's documentary checker policy and
+    band are stale and the manifest is immutable; the addendum carries the
+    corrected provenance and must agree with what the code enforces."""
+    from heesch_encoder.multilevel.api import FEASIBILITY_BAND
+    from heesch_verify.proofgate import HARNESS_PROOF_BAND
+
+    add = manifest.load_revision_addendum(2)
+    assert add is not None and add["addendum_to"] == "rev-2.json"
+    rev = manifest.load_revision(2)
+    fixes = add["corrections"]
+    assert fixes["checkers.record_tier_policy"]["rev-2.json_says"] == rev["checkers"]["record_tier_policy"]
+    pol = fixes["checkers.record_tier_policy"]["enforced"]
+    assert pol["formally_verified_slot"] == "cake_lpr"
+    assert pol["lrat_check_may_substitute_for_cake_lpr"] is False
+    assert pol["record_tier_requires"] == 2
+    band = fixes["feasibility_band.supported"]
+    assert [(r["max_cells"], r["max_m"]) for r in band["rev-2.json_says"]] == \
+        [(r["max_cells"], r["max_m"]) for r in rev["feasibility_band"]["supported"]]
+    assert tuple((r["max_cells"], r["max_m"]) for r in band["enforced"]) == FEASIBILITY_BAND
+    assert tuple((r["max_cells"], r["max_m"]) for r in band["in_harness_band"]) == HARNESS_PROOF_BAND
+    # The addendum never touches a frozen constant.
+    assert rev["frozen_constants_digest"] == manifest.constants_digest_v2()
+
