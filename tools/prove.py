@@ -47,7 +47,8 @@ from heesch_verify.canonical import canonical_form  # noqa: E402
 from heesch_verify.parse import (  # noqa: E402
     PROOF_ENCODER_REVISION, PROOF_ENCODER_VERSION, PROOF_SCHEMA_VERSION,
 )
-from heesch_verify.proofgate import HARNESS_PROOF_BAND, in_harness_band  # noqa: E402
+from heesch_verify.profile import PROFILES  # noqa: E402
+from heesch_verify.proofgate import HARNESS_PROOF_BAND, in_band, in_harness_band  # noqa: E402,F401
 from heesch_verify.witness import VerifyConfig, verify_witness  # noqa: E402
 from heesch_encoder.multilevel.api import encode_multilevel_stream, in_feasibility_band  # noqa: E402
 
@@ -294,12 +295,16 @@ def main(argv=None) -> int:
     ap.add_argument("--no-selfcheck", action="store_true",
                     help="skip the drat-trim self-check of the DRAT (default: run it when tools/bin/drat-trim exists)")
     ap.add_argument("--check", action="store_true", help="run the harness's ProofCarryingGate afterwards")
-    ap.add_argument("--band", choices=("harness", "encoder", "none"), default="harness",
-                    help="which (cells, m) band to respect: `harness` (default — warn when the "
-                         "benchmark job would answer RESOURCE_EXCEEDED, refuse outside the encoder "
-                         "band), `encoder` (refuse only outside the encoder's measured band), or "
-                         "`none` (out-of-band: encode anything, e.g. F(S,7) for an Hc = 5, Hh = 6 "
-                         "candidate — architecture §13.9); also selects the band for --check")
+    ap.add_argument("--profile", choices=("record", "standard"), default="record",
+                    help="the benchmark's resource profile to check the (cells, m) against "
+                         "(default record: the dedicated runner, heesch_verify/profile.py; "
+                         "standard: an 8 GB / 30-min job)")
+    ap.add_argument("--band", choices=("profile", "encoder", "none"), default="profile",
+                    help="which (cells, m) band to respect: `profile` (default — warn when the "
+                         "benchmark job under --profile would answer RESOURCE_EXCEEDED, refuse "
+                         "outside the encoder band), `encoder` (refuse only outside the encoder's "
+                         "measured band), or `none` (encode anything; maintainer re-check, "
+                         "architecture §13.9); also selects the band for --check")
     args = ap.parse_args(argv)
 
     from heesch_verify.parse import (
@@ -357,13 +362,14 @@ def main(argv=None) -> int:
     if m < hh + 1:
         return _fail(f"m={m} but the witness verifies hh={hh}; need m >= {hh + 1}")
     n = len(sub.cells)
+    profile = PROFILES[args.profile]
     if args.band != "none" and not in_feasibility_band(n, m):
         return _fail(f"({n} cells, m={m}) is outside the encoder feasibility band "
-                     "(pass --band none for an out-of-band proof, architecture §13.9)")
-    if not in_harness_band(n, m):
-        print(f"warning: ({n} cells, m={m}) is outside the in-harness proof band "
-              f"{HARNESS_PROOF_BAND}; the harness will answer RESOURCE_EXCEEDED — this proof "
-              "can only be checked out of band (architecture §13.9)", file=sys.stderr)
+                     "(pass --band none for a maintainer re-check, architecture §13.9)")
+    if not profile.in_band(n, m):
+        print(f"warning: ({n} cells, m={m}) is outside the {profile.name} profile's in-harness "
+              f"proof band {profile.harness_band}; the benchmark job will answer "
+              "RESOURCE_EXCEEDED (architecture §13.9)", file=sys.stderr)
 
     try:
         import pysat  # noqa: F401
@@ -490,8 +496,11 @@ def main(argv=None) -> int:
         from heesch_verify.proofgate import ProofCarryingGate, named_band
 
         outcome2 = verify_witness(new_text, VerifyConfig())
+        gate_kwargs = {"profile": profile}
+        if args.band != "profile":
+            gate_kwargs["band"] = named_band(args.band)
         verdict = ProofCarryingGate(shape_path.parent, checker_dir,
-                                    band=named_band(args.band)).check(outcome2.submission, outcome2)
+                                    **gate_kwargs).check(outcome2.submission, outcome2)
         print("gate:", verdict.to_json())
         return 0 if verdict.code is None else 1
     return 0

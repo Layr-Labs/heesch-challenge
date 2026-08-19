@@ -112,16 +112,21 @@ def _record_eligible(evidence: str, hc_verified: int) -> bool:
     return evidence == "proof" and hc_verified >= 5
 
 
-def _run_proof_gate(sub, outcome):
+def _run_proof_gate(sub, outcome, profile):
     # Checker binaries: the harness may be running from the installed copy in
     # .venv-bench (python -I), so the package-relative default in
     # heesch_encoder.proofcheck.checkers does not resolve — locate them
-    # explicitly (HEESCH_CHECKER_DIR, else <repo>/tools/bin). Budget: fits the
-    # 30-minute benchmark job with the witness/encoding stages.
+    # explicitly (HEESCH_CHECKER_DIR, else <repo>/tools/bin). Every budget
+    # (band, encode guard, checker caps/deadline, size caps) comes from the
+    # machine-derived resource profile (heesch_verify/profile.py): `record`
+    # on the dedicated runner (docs/RUNNER.md), `standard` elsewhere.
     from heesch_encoder.proofcheck.checkers import CheckBudget
 
     checker_dir = pathlib.Path(os.environ.get("HEESCH_CHECKER_DIR") or (ROOT / "tools" / "bin"))
-    return ProofCarryingGate(SHAPE_PATH.parent, checker_dir, CheckBudget()).check(sub, outcome)
+    budget = CheckBudget(per_checker=profile.checker_caps,
+                         deadline_seconds=profile.checker_deadline_s)
+    return ProofCarryingGate(SHAPE_PATH.parent, checker_dir, budget,
+                             profile=profile).check(sub, outcome)
 
 
 def main() -> None:
@@ -209,9 +214,12 @@ def main() -> None:
         claim += f"; non-tiler by census (Kaplan 2022: Hc={gate.census_hc}, Hh={gate.census_hh})"
         result = _with(result, census_hc=gate.census_hc, census_hh=gate.census_hh)
 
+    from heesch_verify.profile import detect as detect_profile
+
+    profile = detect_profile()
     proof_verdict = None
     if sub.proof is not None:
-        proof_verdict = _run_proof_gate(sub, outcome)
+        proof_verdict = _run_proof_gate(sub, outcome, profile)
         # Any block that is present is verified or the submission is rejected
         # (same rule as #DEFECT); a failed proof is never silently ignored.
         if proof_verdict.code is not None:
@@ -262,6 +270,7 @@ def main() -> None:
         exact=exact,
         record_eligible=_record_eligible(evidence, result.hc_verified),
         record_exact=bool(_record_eligible(evidence, result.hc_verified) and exact),
+        resource_profile=profile.name,
     )
     payload = _score_payload(result, defect_res)
     payload["metrics"]["gate_detail"] = gate_detail

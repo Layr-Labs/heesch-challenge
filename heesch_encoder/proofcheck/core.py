@@ -66,14 +66,20 @@ def canonical_clause_line(lits) -> str:
     return " ".join(str(l) for l in uniq) + " 0"
 
 
-def parse_core_file(path: str) -> list[str]:
+def parse_core_file(path: str, max_clauses: int | None = None,
+                    max_bytes: int | None = None) -> list[str]:
     """Strict grammar → list of canonical clause lines (submitter order).
     Every rejection is a CoreError: the submitter-controlled bytes may be
     non-ASCII or unreadable (audit 2026-08-19 Medium 3) and that must be a
     structured GATE_PROOF_INVALID, never a UnicodeDecodeError/OSError out of
-    the gate."""
+    the gate. `max_clauses` / `max_bytes`: the resource profile's caps
+    (default: the module constants)."""
     try:
-        return _parse_core_file_strict(path)
+        return _parse_core_file_strict(
+            path,
+            CORE_MAX_CLAUSES if max_clauses is None else max_clauses,
+            CORE_MAX_BYTES if max_bytes is None else max_bytes,
+        )
     except UnicodeDecodeError as e:
         raise CoreError("GATE_PROOF_INVALID",
                         f"core file is not ASCII text (byte {e.start}: {e.reason})") from None
@@ -81,10 +87,10 @@ def parse_core_file(path: str) -> list[str]:
         raise CoreError("GATE_PROOF_INVALID", f"core file unreadable: {e.strerror or e}") from None
 
 
-def _parse_core_file_strict(path: str) -> list[str]:
+def _parse_core_file_strict(path: str, max_clauses: int, max_bytes: int) -> list[str]:
     size = os.stat(path).st_size
-    if size > CORE_MAX_BYTES:
-        raise CoreError("RESOURCE_EXCEEDED", f"core file is {size} bytes (cap {CORE_MAX_BYTES})")
+    if size > max_bytes:
+        raise CoreError("RESOURCE_EXCEEDED", f"core file is {size} bytes (cap {max_bytes})")
     out: list[str] = []
     with open(path, "r", encoding="ascii", errors="strict") as fh:
         for lineno, raw in enumerate(fh, 1):
@@ -109,9 +115,9 @@ def _parse_core_file_strict(path: str) -> list[str]:
                 raise CoreError("GATE_PROOF_INVALID",
                                 f"core line {lineno}: tautology is never a clause of F")
             out.append(canonical_clause_line(lits))
-            if len(out) > CORE_MAX_CLAUSES:
+            if len(out) > max_clauses:
                 raise CoreError("RESOURCE_EXCEEDED",
-                                f"core has more than {CORE_MAX_CLAUSES} clauses")
+                                f"core has more than {max_clauses} clauses")
     if not out:
         raise CoreError("GATE_PROOF_INVALID", "core file has no clauses")
     return out
@@ -122,7 +128,9 @@ def check_and_write_core(core_lines: list[str], formula_cnf_path: str, num_vars:
     """Verify every core clause is a line of F (streamed, exact) and write the
     core CNF for the checker from F's own lines in the submitter's order."""
     needed = set(core_lines)
-    found: dict[str, str] = {}
+    # `found` holds the CORE's own string objects (hash-equal to F's line), so
+    # a 30 M-clause core costs one str per clause, not two (Plan 3 P3).
+    found: set = set()
     formula_clauses = 0
     try:
         return _check_and_write_core(core_lines, needed, found, formula_clauses,
@@ -143,7 +151,7 @@ def _check_and_write_core(core_lines, needed, found, formula_clauses,
             formula_clauses += 1
             line = raw[:-1] if raw.endswith("\n") else raw
             if line in needed and line not in found:
-                found[line] = line
+                found.add(line)
                 if len(found) == len(needed):
                     # Keep counting lines is unnecessary once every core
                     # clause is located; the header count is authoritative.
@@ -158,7 +166,7 @@ def _check_and_write_core(core_lines, needed, found, formula_clauses,
     with open(out_path, "w", encoding="ascii", newline="\n") as out:
         out.write(f"p cnf {num_vars} {len(core_lines)}\n")
         for line in core_lines:
-            out.write(found[line])
+            out.write(line)
             out.write("\n")
     return CoreResult(core_cnf_path=out_path, num_clauses=len(core_lines),
                       formula_clauses=formula_clauses)

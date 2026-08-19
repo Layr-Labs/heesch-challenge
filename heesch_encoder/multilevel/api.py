@@ -64,7 +64,12 @@ def regenerate_and_match_v2(claimed_digest: str, tile_cells, grid: Grid,
 # (18 MB xz). Encodable and checkable with a core list on a workstation; the
 # in-harness band stays at (12, 6) until the same cycle is timed on the
 # benchmark runner (docs/ml-feasibility.md, architecture §13.9 step 3).
-FEASIBILITY_BAND = ((12, 7), (20, 5), (50, 4), (100, 3), (200, 2))
+# 2026-08-19 (Plan 3): the dedicated record runner (heesch_verify/profile.py
+# RECORD) makes F(S,7) in-harness for 11-20 cells and F(S,8) for <= 12; the
+# encoder band follows (counts: 13-hex F(S,7) 52 M clauses / 4.3 GB RSS,
+# 16-hex F(S,7) 77 M / 7.6 GB; 11-hex F(S,8) ~75 M). (20, 8) waits for the
+# runner measurement (docs/ml-feasibility.md).
+FEASIBILITY_BAND = ((12, 8), (20, 7), (50, 4), (100, 3), (200, 2))
 
 
 def feasibility_band() -> tuple[tuple[int, int], ...]:

@@ -19,7 +19,7 @@
   ],
   "scorePath": "score.json",
   "minScoreImprovementBips": 0,
-  "maxSubmissionBytes": 134217728,
+  "maxSubmissionBytes": 536870912,
   "runner": {
     "provider": "github-actions",
     "workflow": "benchmark.yml"

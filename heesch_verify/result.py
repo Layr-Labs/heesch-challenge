@@ -137,6 +137,10 @@ class Result:
     # `exact` (Hc = Hh = hc pinned by a proof at m = hh + 1).
     record_eligible: bool = False
     record_exact: bool = False
+    # Which resource profile the harness ran under (heesch_verify/profile.py):
+    # "record" on the dedicated runner, "standard" on an 8 GB job. Decides the
+    # proof band and budgets, never the acceptance rule.
+    resource_profile: str = ""
     # Frozen conventions (§11) written into every record.
     conventions: dict = field(default_factory=dict)
 
@@ -181,6 +185,7 @@ class Result:
             "exact": self.exact,
             "record_eligible": self.record_eligible,
             "record_exact": self.record_exact,
+            "resource_profile": self.resource_profile,
             "conventions": dict(self.conventions),
         }
         return out

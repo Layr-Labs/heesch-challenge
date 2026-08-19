@@ -146,7 +146,11 @@ def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
                    tier: Tier = Tier.RECORD, timeout: float = 3600.0,
                    bin_dir=None, budget=None, core_path=None,
                    encode_timeout_s: float | None = None,
-                   enforce_band: bool = True) -> ProofOutcome:
+                   enforce_band: bool = True,
+                   max_proof_bytes: int | None = None,
+                   core_max_clauses: int | None = None,
+                   core_max_bytes: int | None = None,
+                   cake_heap_max_mb: int | None = None) -> ProofOutcome:
     """v2 path: regenerate the multilevel F(S, m) then the same frozen
     steps. UNSAT verified here means no weak m-configuration exists —
     Hh <= m-1 over ALL patches (multilevel spec §2.2).
@@ -162,8 +166,10 @@ def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
 
     `enforce_band=False` skips the feasibility-band policy (the out-of-band
     record re-check of architecture §13.9, run by a maintainer on a machine
-    without the job's caps — e.g. F(S,7) for an Hc = 5, Hh = 6 candidate).
-    The harness never passes it."""
+    without the job's caps). The harness never passes it.
+
+    `max_proof_bytes` / `core_max_*` / `cake_heap_max_mb`: the resource
+    profile's caps (heesch_verify/profile.py); None = the module defaults."""
     import math
     import time
 
@@ -197,13 +203,25 @@ def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
                 ProofStatus.RESOURCE_EXCEEDED,
                 f"encoding F(S,{m}) for {n_cells} cells exceeded {limit:.0f} s",
             )
+        except OSError as e:
+            # ENOSPC / EIO while streaming the DIMACS to scratch: a resource
+            # outcome, never a traceback (Plan 3 P3).
+            return ProofOutcome(ProofStatus.RESOURCE_EXCEEDED,
+                                f"encoding F(S,{m}) failed writing scratch: {e}")
         return check_proof_encoded(sub, enc, tier=tier, timeout=timeout,
-                                   bin_dir=bin_dir, budget=budget, core_path=core_path)
+                                   bin_dir=bin_dir, budget=budget, core_path=core_path,
+                                   max_proof_bytes=max_proof_bytes,
+                                   core_max_clauses=core_max_clauses,
+                                   core_max_bytes=core_max_bytes,
+                                   cake_heap_max_mb=cake_heap_max_mb)
 
 
 def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
                         timeout: float = 3600.0, bin_dir=None, budget=None,
-                        core_path=None) -> ProofOutcome:
+                        core_path=None, max_proof_bytes: int | None = None,
+                        core_max_clauses: int | None = None,
+                        core_max_bytes: int | None = None,
+                        cake_heap_max_mb: int | None = None) -> ProofOutcome:
     """Steps 2-6 of the frozen order, schema-blind: works for any encoding
     object exposing digest/num_vars/num_clauses/dimacs. `bin_dir` locates the
     checker binaries (see checkers._BIN); `budget` is a checkers.CheckBudget.
@@ -213,6 +231,8 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
     checked to be a clause of the regenerated formula (proofcheck.core) and
     the checkers then run on that verified subset — step 5b."""
     streamed = not hasattr(enc, "dimacs")
+    if max_proof_bytes is None:
+        max_proof_bytes = MAX_PROOF_BYTES
     cnf_bytes = enc.cnf_bytes if streamed else len(enc.dimacs)
     empty_clause = enc.has_empty_clause if streamed else _has_empty_clause(enc.dimacs)
     # 2. Digest match before touching the proof.
@@ -245,10 +265,10 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
         proof_bytes = os.stat(sub.proof_path).st_size
     except OSError as e:
         return ProofOutcome(ProofStatus.GATE_PROOF_INVALID, str(e), cnf_digest=enc.digest)
-    if proof_bytes > MAX_PROOF_BYTES:
+    if proof_bytes > max_proof_bytes:
         return ProofOutcome(
             ProofStatus.RESOURCE_EXCEEDED,
-            f"proof is {proof_bytes} bytes (cap {MAX_PROOF_BYTES}); requeue out-of-band",
+            f"proof is {proof_bytes} bytes (cap {max_proof_bytes})",
             cnf_digest=enc.digest, proof_bytes=proof_bytes,
         )
     # 5. Sniff (bounded windows only).
@@ -278,12 +298,17 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
 
     # 6. Checkers.
     with tempfile.TemporaryDirectory() as td:
-        cnf_path = os.path.join(td, "formula.cnf")
-        if streamed:
-            enc.write_dimacs(cnf_path)
+        if streamed and getattr(enc, "path", None) and os.path.exists(enc.path):
+            # The streamed DIMACS already sits in check_proof_v2's scratch
+            # (still open); a second multi-GB copy bought nothing (Plan 3 P3).
+            cnf_path = enc.path
         else:
-            with open(cnf_path, "wb") as fh:
-                fh.write(enc.dimacs)
+            cnf_path = os.path.join(td, "formula.cnf")
+            if streamed:
+                enc.write_dimacs(cnf_path)
+            else:
+                with open(cnf_path, "wb") as fh:
+                    fh.write(enc.dimacs)
         core_clauses = 0
         if core_path is not None:
             # 5b. Core subset: exact membership against F, then the checkers
@@ -291,7 +316,8 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
             from . import core as core_mod
 
             try:
-                core_lines = core_mod.parse_core_file(core_path)
+                core_lines = core_mod.parse_core_file(
+                    core_path, max_clauses=core_max_clauses, max_bytes=core_max_bytes)
                 core_res = core_mod.check_and_write_core(
                     core_lines, cnf_path, enc.num_vars, os.path.join(td, "core.cnf"))
             except core_mod.CoreError as e:
@@ -328,19 +354,20 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
                 # Formally-verified slot: cake_lpr only, over the LRAT drat-trim
                 # emitted. No lrat-check fallback.
                 results.append(ck.cake_lpr(cnf_path, lrat_out, timeout=timeout,
-                                           bin_dir=bin_dir, budget=budget))
+                                           bin_dir=bin_dir, budget=budget,
+                                           heap_max_mb=cake_heap_max_mb))
         elif tier is Tier.RECORD:  # LRAT_TEXT, record tier
             # cake_lpr is the formally-verified primary; lrat-check backs it as
             # the second independent verdict only after cake_lpr VERIFIED.
             r_fv = ck.cake_lpr(cnf_path, sub.proof_path, timeout=timeout,
-                               bin_dir=bin_dir, budget=budget)
+                               bin_dir=bin_dir, budget=budget, heap_max_mb=cake_heap_max_mb)
             results.append(r_fv)
             if r_fv.status is ck.CheckStatus.VERIFIED:
                 results.append(ck.lrat_check(cnf_path, sub.proof_path, timeout=timeout,
                                              bin_dir=bin_dir, budget=budget))
         else:  # LRAT_TEXT, triage tier — any available checker suffices
             r1 = ck.cake_lpr(cnf_path, sub.proof_path, timeout=timeout,
-                             bin_dir=bin_dir, budget=budget)
+                             bin_dir=bin_dir, budget=budget, heap_max_mb=cake_heap_max_mb)
             if r1.status is ck.CheckStatus.CHECKER_MISSING:
                 r1 = ck.lrat_check(cnf_path, sub.proof_path, timeout=timeout,
                                    bin_dir=bin_dir, budget=budget)

@@ -119,7 +119,12 @@ CAKE_LPR_STACK_MB = 1024
 _CAKE_RESOURCE_MARKERS = ("heap space exhausted", "stack space exhausted")
 
 
-def cake_lpr_heap_mb() -> int:
+def cake_lpr_heap_mb(max_mb: int | None = None) -> int:
+    """Heap for cake_lpr in MB: HEESCH_CAKE_HEAP_MB if numeric, else 85 % of
+    MemAvailable clamped to [CAKE_LPR_HEAP_MB_MIN, max_mb] (max_mb defaults
+    to CAKE_LPR_HEAP_MB_MAX; the resource profile passes its own cap)."""
+    if max_mb is None:
+        max_mb = CAKE_LPR_HEAP_MB_MAX
     override = os.environ.get("HEESCH_CAKE_HEAP_MB")
     if override:
         try:
@@ -137,11 +142,11 @@ def cake_lpr_heap_mb() -> int:
         pass
     if avail_mb is None:
         return 4096
-    return max(CAKE_LPR_HEAP_MB_MIN, min(CAKE_LPR_HEAP_MB_MAX, int(avail_mb * 0.85)))
+    return max(CAKE_LPR_HEAP_MB_MIN, min(max_mb, int(avail_mb * 0.85)))
 
 
 def _run(name: str, args: list[str], timeout: float, bin_dir=None,
-         budget: CheckBudget | None = None) -> CheckResult:
+         budget: CheckBudget | None = None, heap_max_mb: int | None = None) -> CheckResult:
     exe = checker_path(name, bin_dir)
     problem = checker_problem(exe)
     if problem is not None:
@@ -155,7 +160,7 @@ def _run(name: str, args: list[str], timeout: float, bin_dir=None,
                            "proof-check deadline exhausted before spawn")
     argv = [str(exe)]
     if name == "cake_lpr":
-        argv += [f"--CML_HEAP_SIZE={cake_lpr_heap_mb()}", f"--CML_STACK_SIZE={CAKE_LPR_STACK_MB}"]
+        argv += [f"--CML_HEAP_SIZE={cake_lpr_heap_mb(heap_max_mb)}", f"--CML_STACK_SIZE={CAKE_LPR_STACK_MB}"]
     argv += args
     t0 = time.time()
     try:
@@ -206,5 +211,5 @@ def lrat_check(cnf_path: str, lrat_path: str, *, timeout: float = 3600.0,
 
 
 def cake_lpr(cnf_path: str, lrat_path: str, *, timeout: float = 3600.0,
-             bin_dir=None, budget=None) -> CheckResult:
-    return _run("cake_lpr", [cnf_path, lrat_path], timeout, bin_dir, budget)
+             bin_dir=None, budget=None, heap_max_mb: int | None = None) -> CheckResult:
+    return _run("cake_lpr", [cnf_path, lrat_path], timeout, bin_dir, budget, heap_max_mb)

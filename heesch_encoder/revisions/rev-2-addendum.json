@@ -1,40 +1,112 @@
 {
   "addendum_to": "rev-2.json",
-  "addendum_revision": 1,
+  "addendum_revision": 2,
   "date": "2026-08-19",
   "why": "rev-2.json is immutable (sha256-pinned by tests/encoder/test_revision_freeze.py) and two of its DOCUMENTARY fields no longer describe the enforced behaviour. Neither field is part of frozen_constants_digest, so no CNF byte and no historical proof is affected; this addendum is the corrected provenance and is itself checked against the live code (test_revision_freeze.py::test_rev2_addendum_matches_code). Audit 2026-08-19 Low 12.",
   "corrections": {
     "checkers.record_tier_policy": {
-      "rev-2.json_says": ["cake_lpr-or-lrat-check", "drat-trim"],
+      "rev-2.json_says": [
+        "cake_lpr-or-lrat-check",
+        "drat-trim"
+      ],
       "enforced": {
         "record_tier_requires": 2,
         "formally_verified_slot": "cake_lpr",
         "lrat_check_may_substitute_for_cake_lpr": false,
-        "drat_route": ["drat-trim", "cake_lpr"],
-        "lrat_route": ["cake_lpr", "lrat-check"],
-        "source": "heesch_encoder/proofcheck/pipeline.py check_proof_encoded step 6; architecture §13.4; audit F1/F2 (2026-08)"
+        "drat_route": [
+          "drat-trim",
+          "cake_lpr"
+        ],
+        "lrat_route": [
+          "cake_lpr",
+          "lrat-check"
+        ],
+        "source": "heesch_encoder/proofcheck/pipeline.py check_proof_encoded step 6; architecture \u00a713.4; audit F1/F2 (2026-08)"
       }
     },
     "feasibility_band.supported": {
       "rev-2.json_says": [
-        {"max_cells": 20, "max_m": 5},
-        {"max_cells": 50, "max_m": 4},
-        {"max_cells": 100, "max_m": 3},
-        {"max_cells": 200, "max_m": 2}
+        {
+          "max_cells": 20,
+          "max_m": 5
+        },
+        {
+          "max_cells": 50,
+          "max_m": 4
+        },
+        {
+          "max_cells": 100,
+          "max_m": 3
+        },
+        {
+          "max_cells": 200,
+          "max_m": 2
+        }
       ],
       "enforced": [
-        {"max_cells": 12, "max_m": 7, "measured": "2026-08-19, F(S,7) of the Kaplan Hc=4 11-hex: 187 s encode, 3.1 GB RSS, 36.5 M clauses"},
-        {"max_cells": 20, "max_m": 5},
-        {"max_cells": 50, "max_m": 4},
-        {"max_cells": 100, "max_m": 3},
-        {"max_cells": 200, "max_m": 2}
+        {
+          "max_cells": 12,
+          "max_m": 8,
+          "measured": "2026-08-19: F(S,7) of the Kaplan Hc=4 11-hex 187 s encode / 3.1 GB RSS / 36.5 M clauses; F(S,8) ~75 M by count"
+        },
+        {
+          "max_cells": 20,
+          "max_m": 7,
+          "measured": "2026-08-19 counts: 13-hex F(S,7) 51.6 M clauses / 4.3 GB RSS, 16-hex F(S,7) 77.3 M / 7.6 GB"
+        },
+        {
+          "max_cells": 50,
+          "max_m": 4
+        },
+        {
+          "max_cells": 100,
+          "max_m": 3
+        },
+        {
+          "max_cells": 200,
+          "max_m": 2
+        }
       ],
-      "source": "heesch_encoder/multilevel/api.py FEASIBILITY_BAND (measured policy, not a frozen constant); docs/ml-feasibility.md",
-      "in_harness_band": [
-        {"max_cells": 12, "max_m": 6},
-        {"max_cells": 20, "max_m": 5},
-        {"max_cells": 50, "max_m": 3},
-        {"max_cells": 100, "max_m": 2}
+      "source": "heesch_encoder/multilevel/api.py FEASIBILITY_BAND (measured policy, not a frozen constant); heesch_verify/profile.py STANDARD/RECORD harness bands; docs/ml-feasibility.md",
+      "in_harness_band_standard": [
+        {
+          "max_cells": 12,
+          "max_m": 6
+        },
+        {
+          "max_cells": 20,
+          "max_m": 5
+        },
+        {
+          "max_cells": 50,
+          "max_m": 3
+        },
+        {
+          "max_cells": 100,
+          "max_m": 2
+        }
+      ],
+      "in_harness_band_record": [
+        {
+          "max_cells": 12,
+          "max_m": 8
+        },
+        {
+          "max_cells": 20,
+          "max_m": 7
+        },
+        {
+          "max_cells": 50,
+          "max_m": 4
+        },
+        {
+          "max_cells": 100,
+          "max_m": 3
+        },
+        {
+          "max_cells": 200,
+          "max_m": 2
+        }
       ]
     }
   }

@@ -123,7 +123,7 @@ def test_census_shape_with_broken_proof_still_rejects(tmp_path):
 
 # --- proof-file handling (checkers present, gate run in-process) -------------
 
-def _gate(tmp_path, text, files):
+def _gate(tmp_path, text, files, **gate_kwargs):
     d = checker_dir_for_tests(tmp_path)
     if d is None:
         pytest.skip("tools/bin checkers not built")
@@ -132,7 +132,7 @@ def _gate(tmp_path, text, files):
     for name, data in files:
         (subdir / name).write_bytes(data)
     out = verify_witness(text)
-    return ProofCarryingGate(subdir, d).check(out.submission, out)
+    return ProofCarryingGate(subdir, d, **gate_kwargs).check(out.submission, out)
 
 
 def test_symlinked_proof_rejected(tmp_path):
@@ -160,12 +160,13 @@ def test_payload_digest_mismatch_rejected(tmp_path):
 def test_xz_bomb_is_bounded(tmp_path, monkeypatch):
     # A few KB of xz that inflates past the payload cap: the gate must stop
     # at the cap, quickly, without materializing the whole payload.
-    import heesch_verify.proofgate as pg
-    monkeypatch.setattr(pg, "PROOF_MAX_PAYLOAD_BYTES", 4 * 1024 * 1024)
+    import dataclasses
+    from heesch_verify.profile import STANDARD
+    small = dataclasses.replace(STANDARD, proof_max_payload_bytes=4 * 1024 * 1024)
     bomb = lzma.compress(b"0" * (16 * 1024 * 1024), preset=9)
     assert len(bomb) < 64 * 1024
     text = CENSUS_11 + _block(3, "a" * 64, 1, 1, "p.drat.xz", "drat", "xz", "b" * 64)
-    v = _gate(tmp_path, text, [("p.drat.xz", bomb)])
+    v = _gate(tmp_path, text, [("p.drat.xz", bomb)], profile=small)
     assert v.code is ErrorCode.RESOURCE_EXCEEDED
     assert "decompressed" in v.detail
 
@@ -180,10 +181,11 @@ def test_xz_trailing_garbage_rejected(tmp_path):
 
 
 def test_oversized_stored_proof_rejected(tmp_path, monkeypatch):
-    import heesch_verify.proofgate as pg
-    monkeypatch.setattr(pg, "PROOF_MAX_STORED_BYTES", 16)
+    import dataclasses
+    from heesch_verify.profile import STANDARD
+    small = dataclasses.replace(STANDARD, proof_max_stored_bytes=16)
     text = CENSUS_11 + _block(3, "a" * 64, 1, 1, "p.drat", "drat", "none", "b" * 64)
-    v = _gate(tmp_path, text, [("p.drat", b"0\n" * 100)])
+    v = _gate(tmp_path, text, [("p.drat", b"0\n" * 100)], profile=small)
     assert v.code is ErrorCode.RESOURCE_EXCEEDED
 
 
@@ -216,7 +218,7 @@ def test_gate_band_param_narrow_rejects(tmp_path):
 
 
 def test_gate_band_none_skips_the_band(tmp_path):
-    """band=None (the `none` choice): m = 8 is past every band, yet the gate
+    """band=None (the `none` choice): m = 8 is past the standard band, yet the gate
     proceeds to the next cheap check (payload digest) instead of refusing."""
     text = CENSUS_11 + _block(8, "a" * 64, 1, 1, "p.drat", "drat", "none", "b" * 64)
     v = _gate_with_band(tmp_path, text, [("p.drat", b"0\n")], band=None)
@@ -248,13 +250,13 @@ def test_check_proof_v2_enforce_band_false_reaches_the_encoder(tmp_path, monkeyp
     proof = tmp_path / "p.drat"
     proof.write_bytes(b"0\n")
     psub = ProofSubmission(str(proof), "0" * 64, 1, 1)
-    # Enforced (default): m = 8 never reaches the encoder.
-    r = check_proof_v2(psub, tile, out.submission.grid, out.contact, 8, Tier.RECORD)
+    # Enforced (default): m = 9 (past every band) never reaches the encoder.
+    r = check_proof_v2(psub, tile, out.submission.grid, out.contact, 9, Tier.RECORD)
     assert r.status is ProofStatus.RESOURCE_EXCEEDED and called == []
-    # Out of band: the encoder is invoked at m = 8.
+    # Out of band: the encoder is invoked at m = 9.
     with pytest.raises(RuntimeError):
-        check_proof_v2(psub, tile, out.submission.grid, out.contact, 8, Tier.RECORD, enforce_band=False)
-    assert called == [8]
+        check_proof_v2(psub, tile, out.submission.grid, out.contact, 9, Tier.RECORD, enforce_band=False)
+    assert called == [9]
 
 
 def test_wrong_cnf_digest_rejected_before_checkers(tmp_path, unsat_proof):
@@ -398,9 +400,9 @@ def test_cli_check_proof_matches_harness(tmp_path, unsat_proof):
     assert proc.returncode == 0, proc.stdout + proc.stderr
     out = json.loads(proc.stdout)
     assert out["proof"]["status"] == "VERIFIED" and out["proof"]["m"] == 3
-    assert out["proof"]["band"] == "harness"
-    # --band encoder / none verify the same proof and record the band used.
-    for band in ("encoder", "none"):
+    assert out["proof"]["band"] == "profile" and out["proof"]["profile"] in ("standard", "record")
+    # --band harness / record / encoder / none verify the same proof and record the band used.
+    for band in ("harness", "record", "encoder", "none"):
         proc = subprocess.run([sys.executable, "-m", "heesch_verify", str(sub / "best.heesch"),
                                "--check-proof", "--band", band],
                               capture_output=True, text=True, env=env, timeout=600)

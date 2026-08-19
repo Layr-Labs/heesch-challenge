@@ -88,7 +88,7 @@ def test_rev2_addendum_matches_code():
     band are stale and the manifest is immutable; the addendum carries the
     corrected provenance and must agree with what the code enforces."""
     from heesch_encoder.multilevel.api import FEASIBILITY_BAND
-    from heesch_verify.proofgate import HARNESS_PROOF_BAND
+    from heesch_verify.profile import RECORD, STANDARD
 
     add = manifest.load_revision_addendum(2)
     assert add is not None and add["addendum_to"] == "rev-2.json"
@@ -103,7 +103,8 @@ def test_rev2_addendum_matches_code():
     assert [(r["max_cells"], r["max_m"]) for r in band["rev-2.json_says"]] == \
         [(r["max_cells"], r["max_m"]) for r in rev["feasibility_band"]["supported"]]
     assert tuple((r["max_cells"], r["max_m"]) for r in band["enforced"]) == FEASIBILITY_BAND
-    assert tuple((r["max_cells"], r["max_m"]) for r in band["in_harness_band"]) == HARNESS_PROOF_BAND
+    assert tuple((r["max_cells"], r["max_m"]) for r in band["in_harness_band_standard"]) == STANDARD.harness_band
+    assert tuple((r["max_cells"], r["max_m"]) for r in band["in_harness_band_record"]) == RECORD.harness_band
     # The addendum never touches a frozen constant.
     assert rev["frozen_constants_digest"] == manifest.constants_digest_v2()
 

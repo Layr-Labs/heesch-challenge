@@ -39,15 +39,18 @@ import stat
 import tempfile
 
 from .canonical import canonical_form
+from .profile import RECORD, STANDARD, ResourceProfile
 from .result import ErrorCode
 
-# On-disk cap for the proof file as submitted (plain or .xz) and the cap on
-# the decompressed payload the checkers read. Coupled to benchmark.json's
-# maxSubmissionBytes (128 MiB): best.heesch (<= 2 MiB) + proof + core must fit.
-PROOF_MAX_STORED_BYTES = 48 * 1024 * 1024
-# A record-scale LRAT (F(S,6) of an 11-cell shape) is ~513 MB raw / 25 MB xz;
-# the payload lands in scratch on disk, never in memory.
-PROOF_MAX_PAYLOAD_BYTES = 1024 * 1024 * 1024
+# Every budget of the proof path lives in heesch_verify/profile.py; the names
+# below are the STANDARD values, kept for library/test callers. The gate reads
+# its own `self.profile` (the harness passes profile.detect()).
+# Stored cap: the proof / core file as submitted (plain or .xz), coupled to
+# benchmark.json's maxSubmissionBytes (512 MiB): best.heesch (<= 2 MiB) +
+# proof + core must fit. Payload cap: decompressed bytes, streamed to scratch
+# on disk, never in memory (an F(S,7) core LRAT is ~0.4 GB raw / ~20 MB xz).
+PROOF_MAX_STORED_BYTES = STANDARD.proof_max_stored_bytes
+PROOF_MAX_PAYLOAD_BYTES = STANDARD.proof_max_payload_bytes
 _XZ_MEMLIMIT = 256 * 1024 * 1024
 _CHUNK = 1024 * 1024
 
@@ -60,7 +63,7 @@ _CHUNK = 1024 * 1024
 # drat-trim 61 s, lrat-check 16 s on the 513 MB LRAT); an Hc = 5 shape with
 # Hh = 6 needs F(S,7), which is out of band (§13.9, `band=` below). See
 # docs/ml-feasibility.md.
-HARNESS_PROOF_BAND = ((12, 6), (20, 5), (50, 3), (100, 2))
+HARNESS_PROOF_BAND = STANDARD.harness_band   # the standard profile's band; RECORD.harness_band is wider
 # Wall-clock guard around the in-process ENCODING step only (pipeline passes
 # it to heesch_encoder.proofcheck.guard); the checkers are bounded separately
 # by the CheckBudget the caller supplies (per-checker caps drat-trim 600 s /
@@ -68,7 +71,7 @@ HARNESS_PROOF_BAND = ((12, 6), (20, 5), (50, 3), (100, 2))
 # budget's construction, which the harness does before this gate runs — so the
 # whole proof stage is <= 1500 s end to end, with the encoder allowed at most
 # the first 600 s of it). Exceeding either is RESOURCE_EXCEEDED, never a crash.
-ENCODE_TIMEOUT_S = 600
+ENCODE_TIMEOUT_S = STANDARD.encode_timeout_s
 
 CHECKER_NAMES = ("drat-trim", "lrat-check", "cake_lpr")
 
@@ -93,12 +96,14 @@ def in_harness_band(n_cells: int, m: int) -> bool:
 # maintainer re-check on a machine without the job's caps. The harness never
 # selects anything but `harness` (no env var, no config) — the strict default
 # is structural.
-BAND_CHOICES = ("harness", "encoder", "none")
+BAND_CHOICES = ("harness", "record", "encoder", "none")
 
 
 def named_band(name: str):
     if name == "harness":
         return HARNESS_PROOF_BAND
+    if name == "record":
+        return RECORD.harness_band
     if name == "encoder":
         from heesch_encoder.multilevel.api import feasibility_band
         return feasibility_band()
@@ -166,16 +171,24 @@ def _open_regular(path: pathlib.Path) -> int:
     return fd
 
 
-def materialize_proof(src: pathlib.Path, dst: pathlib.Path, compression: str) -> tuple[int, str]:
+def materialize_proof(src: pathlib.Path, dst: pathlib.Path, compression: str,
+                      max_stored_bytes: int | None = None,
+                      max_payload_bytes: int | None = None) -> tuple[int, str]:
     """Stream the submitted proof into `dst` (decompressing xz with a bounded
-    output), returning (payload_bytes, payload_sha256). Raises ProofFileError."""
+    output), returning (payload_bytes, payload_sha256). Raises ProofFileError.
+    Caps default to the module constants (STANDARD) so tests can monkeypatch
+    them; the gate passes its profile's."""
+    if max_stored_bytes is None:
+        max_stored_bytes = PROOF_MAX_STORED_BYTES
+    if max_payload_bytes is None:
+        max_payload_bytes = PROOF_MAX_PAYLOAD_BYTES
     fd = _open_regular(src)
     with os.fdopen(fd, "rb", closefd=True) as fh:
         size = os.fstat(fh.fileno()).st_size
-        if size > PROOF_MAX_STORED_BYTES:
+        if size > max_stored_bytes:
             raise ProofFileError(
                 ErrorCode.RESOURCE_EXCEEDED,
-                f"proof file is {size} bytes (cap {PROOF_MAX_STORED_BYTES})",
+                f"proof file is {size} bytes (cap {max_stored_bytes})",
             )
         h = hashlib.sha256()
         total = 0
@@ -186,10 +199,10 @@ def materialize_proof(src: pathlib.Path, dst: pathlib.Path, compression: str) ->
                     if not chunk:
                         break
                     total += len(chunk)
-                    if total > PROOF_MAX_PAYLOAD_BYTES:
+                    if total > max_payload_bytes:
                         raise ProofFileError(
                             ErrorCode.RESOURCE_EXCEEDED,
-                            f"proof payload exceeds {PROOF_MAX_PAYLOAD_BYTES} bytes",
+                            f"proof payload exceeds {max_payload_bytes} bytes",
                         )
                     h.update(chunk)
                     out.write(chunk)
@@ -203,10 +216,10 @@ def materialize_proof(src: pathlib.Path, dst: pathlib.Path, compression: str) ->
                         data = dec.decompress(chunk, max_length=_CHUNK)
                         while True:
                             total += len(data)
-                            if total > PROOF_MAX_PAYLOAD_BYTES:
+                            if total > max_payload_bytes:
                                 raise ProofFileError(
                                     ErrorCode.RESOURCE_EXCEEDED,
-                                    f"decompressed proof exceeds {PROOF_MAX_PAYLOAD_BYTES} bytes",
+                                    f"decompressed proof exceeds {max_payload_bytes} bytes",
                                 )
                             h.update(data)
                             out.write(data)
@@ -230,14 +243,20 @@ class ProofCarryingGate:
     holds best.heesch and the proof file it names; `checker_dir` holds the
     vendored checker binaries."""
 
-    def __init__(self, submission_dir, checker_dir, budget=None, band=HARNESS_PROOF_BAND):
+    _BAND_UNSET = object()
+
+    def __init__(self, submission_dir, checker_dir, budget=None, band=_BAND_UNSET,
+                 profile: ResourceProfile = STANDARD):
         self.submission_dir = pathlib.Path(submission_dir)
         self.checker_dir = pathlib.Path(checker_dir)
         self.budget = budget
-        # (cells, max m) rows the gate admits; None = no gate band and no
-        # encoder feasibility band either (out-of-band maintainer re-check,
-        # §13.9). The harness always uses the default.
-        self.band = band
+        # Every budget comes from `profile` (heesch_verify/profile.py); the
+        # harness passes profile.detect() — derived from the machine, never
+        # from a participant input. `band` overrides the profile's band for
+        # the maintainer CLI (`--band`): a (cells, max m) tuple, or None = no
+        # gate band and no encoder feasibility band either (§13.9).
+        self.profile = profile
+        self.band = profile.harness_band if band is self._BAND_UNSET else band
 
     def missing_checkers(self) -> list[str]:
         """Names of checkers that are not regular, executable files in
@@ -273,11 +292,24 @@ class ProofCarryingGate:
         # 3. Bands.
         n_cells = len(sub.cells)
         if self.band is not None and not in_band(self.band, n_cells, m):
-            which = "in-harness" if self.band == HARNESS_PROOF_BAND else "selected"
+            which = (f"in-harness ({self.profile.name} profile)"
+                     if self.band == self.profile.harness_band else "selected")
             return ProofVerdict(
                 ErrorCode.RESOURCE_EXCEEDED,
                 f"({n_cells} cells, m={m}) is outside the {which} proof band "
                 f"{tuple(self.band)}",
+                m=m,
+            )
+        # 3b. Scratch disk: the regenerated DIMACS (up to ~110 B/clause) plus
+        # the payload land in TMPDIR; refuse cleanly rather than ENOSPC mid-way.
+        from .profile import scratch_free_bytes
+
+        free = scratch_free_bytes()
+        if free is not None and free < self.profile.min_scratch_bytes:
+            return ProofVerdict(
+                ErrorCode.RESOURCE_EXCEEDED,
+                f"scratch disk has {free >> 30} GiB free; the {self.profile.name} "
+                f"profile needs {self.profile.min_scratch_bytes >> 30} GiB",
                 m=m,
             )
         # 4. Materialize the proof file into scratch.
@@ -286,7 +318,9 @@ class ProofCarryingGate:
         try:
             dst = scratch / f"proof.{block.fmt}"
             try:
-                _, payload_sha = materialize_proof(src, dst, block.compression)
+                _, payload_sha = materialize_proof(
+                    src, dst, block.compression,
+                    self.profile.proof_max_stored_bytes, self.profile.proof_max_payload_bytes)
             except ProofFileError as e:
                 return ProofVerdict(e.code, e.message, m=m)
             if payload_sha != block.payload_sha256:
@@ -306,7 +340,9 @@ class ProofCarryingGate:
                 core_src = self.submission_dir / block.core_file
                 core_dst = scratch / "core.txt"
                 try:
-                    _, core_sha = materialize_proof(core_src, core_dst, block.core_compression)
+                    _, core_sha = materialize_proof(
+                        core_src, core_dst, block.core_compression,
+                        self.profile.proof_max_stored_bytes, self.profile.proof_max_payload_bytes)
                 except ProofFileError as e:
                     return ProofVerdict(e.code, "core: " + e.message, m=m)
                 if core_sha != block.core_sha256:
@@ -328,8 +364,12 @@ class ProofCarryingGate:
                 psub, tile, sub.grid, outcome.contact, m,
                 tier=Tier.RECORD, bin_dir=self.checker_dir, budget=self.budget,
                 core_path=(str(core_dst) if core_dst is not None else None),
-                encode_timeout_s=ENCODE_TIMEOUT_S,
+                encode_timeout_s=self.profile.encode_timeout_s,
                 enforce_band=self.band is not None,
+                max_proof_bytes=self.profile.max_proof_bytes,
+                core_max_clauses=self.profile.core_max_clauses,
+                core_max_bytes=self.profile.core_max_bytes,
+                cake_heap_max_mb=self.profile.cake_heap_max_mb,
             )
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
