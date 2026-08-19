@@ -37,8 +37,11 @@ else
   exit 1
 fi
 
-# 3. Sandboxed verification.
-scratch="$(cd "$(mktemp -d)" && pwd -P)"
+# 3. Sandboxed verification. Scratch lives under HEESCH_SCRATCH (the record
+# runner's NVMe mount, docs/RUNNER.md) or the default temp dir; the harness
+# derives its resource profile from this disk's free space and the machine's
+# memory (heesch_verify/profile.py).
+scratch="$(cd "$(mktemp -d -p "${HEESCH_SCRATCH:-${TMPDIR:-/tmp}}")" && pwd -P)"
 cleanup() { [[ -z "${scratch:-}" ]] || rm -rf "${scratch}" 2>/dev/null || true; }
 trap cleanup EXIT
 chmod 1777 "${scratch}"   # sandboxed process may run as a different uid

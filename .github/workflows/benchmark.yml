@@ -13,13 +13,20 @@ concurrency:
 
 jobs:
   benchmark:
-    # The standard 8 GB runner checks every proof inside the band except the
-    # record-depth F(S,6) case, where cake_lpr needs > 6 GB of heap
-    # (RESOURCE_EXCEEDED, out-of-band procedure). A larger-runner label here
-    # (>= 12 GB) makes that case in-band; the harness sizes the CakeML heap
-    # from available memory (override: HEESCH_CAKE_HEAP_MB).
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # The dedicated record runner (docs/RUNNER.md): >= 8 vCPU, >= 64 GB RAM,
+    # >= 200 GB NVMe scratch. The harness derives its resource profile from
+    # the machine (heesch_verify/profile.py: `record` iff MemAvailable >= 56 GiB
+    # and scratch >= 150 GiB) — the band that admits F(S,7) for 11-20-cell
+    # shapes (an Hc = 5, Hh = 6 certificate) and F(S,8) for <= 12 cells. The
+    # preflight below FAILS the job on a smaller machine rather than letting
+    # it silently score under the narrow `standard` profile.
+    runs-on: [self-hosted, linux, x64, heesch-record]
+    timeout-minutes: 240
+
+    env:
+      # Scratch for the sandboxed verify (DIMACS up to ~15 GB, payloads up to
+      # 8 GiB): the runner's NVMe mount; benchmark.sh mktemp -d's under it.
+      HEESCH_SCRATCH: ${{ vars.HEESCH_SCRATCH || '/tmp' }}
 
     steps:
       - name: Checkout dispatched commit
@@ -76,7 +83,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Runner preflight
+      - name: Runner preflight (fail loud below the record profile's minima)
         shell: bash
         run: |
           set -euo pipefail
@@ -85,9 +92,13 @@ jobs:
             uname -a
             python3 --version
             command -v bwrap && bwrap --version || echo "bubblewrap: absent"
-            nproc; free -m | head -2; df -h /tmp | tail -1
+            nproc; free -m | head -2; df -h "${HEESCH_SCRATCH}" | tail -1
             git rev-parse HEAD
           } | tee benchmark-results/runner.txt
+          # Same thresholds as heesch_verify/profile.py RECORD (MemAvailable >= 56 GiB,
+          # scratch free >= 150 GiB) plus the CPU/arch/sandbox the job needs.
+          python3 tools/runner_preflight.py --scratch "${HEESCH_SCRATCH}" --require record \
+            | tee -a benchmark-results/runner.txt
 
       - name: Setup
         run: |
