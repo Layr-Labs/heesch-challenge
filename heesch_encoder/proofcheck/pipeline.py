@@ -240,6 +240,12 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
             except core_mod.CoreError as e:
                 return ProofOutcome(ProofStatus[e.code], "core: " + e.message,
                                     cnf_digest=enc.digest, proof_bytes=proof_bytes)
+            except (OSError, ValueError) as e:
+                # Second net: parse_core_file already maps decode/IO errors
+                # to CoreError; anything that still escapes is a structured
+                # rejection, never a traceback (audit 2026-08-19 Medium 3).
+                return ProofOutcome(ProofStatus.GATE_PROOF_INVALID, f"core: {e}",
+                                    cnf_digest=enc.digest, proof_bytes=proof_bytes)
             core_clauses = core_res.num_clauses
             if sub.claimed_core_clauses and sub.claimed_core_clauses != core_clauses:
                 return ProofOutcome(ProofStatus.PROOF_HEADER_MISMATCH,

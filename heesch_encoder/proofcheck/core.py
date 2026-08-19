@@ -67,7 +67,21 @@ def canonical_clause_line(lits) -> str:
 
 
 def parse_core_file(path: str) -> list[str]:
-    """Strict grammar → list of canonical clause lines (submitter order)."""
+    """Strict grammar → list of canonical clause lines (submitter order).
+    Every rejection is a CoreError: the submitter-controlled bytes may be
+    non-ASCII or unreadable (audit 2026-08-19 Medium 3) and that must be a
+    structured GATE_PROOF_INVALID, never a UnicodeDecodeError/OSError out of
+    the gate."""
+    try:
+        return _parse_core_file_strict(path)
+    except UnicodeDecodeError as e:
+        raise CoreError("GATE_PROOF_INVALID",
+                        f"core file is not ASCII text (byte {e.start}: {e.reason})") from None
+    except OSError as e:
+        raise CoreError("GATE_PROOF_INVALID", f"core file unreadable: {e.strerror or e}") from None
+
+
+def _parse_core_file_strict(path: str) -> list[str]:
     size = os.stat(path).st_size
     if size > CORE_MAX_BYTES:
         raise CoreError("RESOURCE_EXCEEDED", f"core file is {size} bytes (cap {CORE_MAX_BYTES})")
@@ -110,6 +124,17 @@ def check_and_write_core(core_lines: list[str], formula_cnf_path: str, num_vars:
     needed = set(core_lines)
     found: dict[str, str] = {}
     formula_clauses = 0
+    try:
+        return _check_and_write_core(core_lines, needed, found, formula_clauses,
+                                     formula_cnf_path, num_vars, out_path)
+    except (UnicodeDecodeError, OSError) as e:
+        # F is our own streamed DIMACS; a read/write failure here is a
+        # server-side resource problem, not a verdict on the proof.
+        raise CoreError("RESOURCE_EXCEEDED", f"core check I/O failure: {e}") from None
+
+
+def _check_and_write_core(core_lines, needed, found, formula_clauses,
+                          formula_cnf_path, num_vars, out_path) -> CoreResult:
     with open(formula_cnf_path, "r", encoding="ascii", errors="strict") as fh:
         header = fh.readline()
         if not header.startswith("p cnf "):

@@ -131,7 +131,9 @@ def test_explicit_bin_dir_missing_is_checker_missing(tmp_path):
 def test_budget_exhausted_does_not_spawn(tmp_path):
     b = ck.CheckBudget(deadline_seconds=0.0)
     d = tmp_path
-    ck.checker_path("drat-trim", d).write_text("")  # .exe on Windows
+    exe = ck.checker_path("drat-trim", d)  # .exe on Windows
+    exe.write_text("#!/bin/sh\nexit 0\n")
+    exe.chmod(0o755)  # the spawn predicate now requires a regular, executable file
     r = ck.drat_trim("x.cnf", "p.drat", bin_dir=d, budget=b)
     assert r.status is ck.CheckStatus.RESOURCE_EXCEEDED
     assert "deadline" in r.detail

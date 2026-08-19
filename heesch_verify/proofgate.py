@@ -234,15 +234,12 @@ class ProofCarryingGate:
         self.budget = budget
 
     def missing_checkers(self) -> list[str]:
-        missing = []
-        for name in CHECKER_NAMES:
-            exe = self.checker_dir / (name + (".exe" if os.name == "nt" else ""))
-            try:
-                if not stat.S_ISREG(os.stat(exe).st_mode):
-                    missing.append(name)
-            except OSError:
-                missing.append(name)
-        return missing
+        """Names of checkers that are not regular, executable files in
+        checker_dir (the same predicate checkers._run applies at spawn)."""
+        from heesch_encoder.proofcheck.checkers import checker_path, checker_problem
+
+        return [name for name in CHECKER_NAMES
+                if checker_problem(checker_path(name, self.checker_dir)) is not None]
 
     def check(self, sub, outcome) -> ProofVerdict:
         block = sub.proof

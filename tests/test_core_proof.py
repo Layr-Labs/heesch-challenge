@@ -64,6 +64,35 @@ def test_core_grammar_rejections(tmp_path, bad, code):
     assert ei.value.code == code
 
 
+@pytest.mark.parametrize("raw", [
+    b"\xff1 2 0\n",                 # audit 2026-08-19 Medium 3: leading 0xff
+    b"1 2 0\n\x00",                  # NUL is not ASCII-printable but decodes; grammar rejects
+    "\ufeff1 2 0\n".encode("utf-8"),  # UTF-8 BOM
+    "1 2 0 \u2014\n".encode("utf-8"),  # non-ASCII token
+])
+def test_non_ascii_core_is_structured_rejection(tmp_path, raw):
+    p = tmp_path / "c.txt"
+    p.write_bytes(raw)
+    with pytest.raises(core_mod.CoreError) as ei:
+        core_mod.parse_core_file(str(p))
+    assert ei.value.code == "GATE_PROOF_INVALID"
+
+
+def test_unreadable_core_is_structured_rejection(tmp_path):
+    p = tmp_path / "c.txt"
+    p.write_text("1 2 0\n", encoding="ascii")
+    p.chmod(0)
+    if os.access(p, os.R_OK):
+        pytest.skip("permission bits not enforced here (root / Windows)")
+    try:
+        with pytest.raises(core_mod.CoreError) as ei:
+            core_mod.parse_core_file(str(p))
+        assert ei.value.code == "GATE_PROOF_INVALID"
+        assert "unreadable" in ei.value.message
+    finally:
+        p.chmod(0o644)
+
+
 def test_membership_is_exact(tmp_path):
     F = _write(tmp_path / "F.cnf", "p cnf 4 4\n1 2 0\n-1 3 0\n-2 -3 4 0\n2 3 0\n")
     ok = core_mod.parse_core_file(_write(tmp_path / "c.txt", "2 1 0\n4 -3 -2 0\n"))
@@ -160,6 +189,15 @@ def test_core_with_foreign_clause_is_rejected_before_checkers(tmp_path, baseline
     assert out.status is ProofStatus.GATE_PROOF_INVALID
     assert "not clauses of the regenerated formula" in out.detail
     assert calls == []
+
+
+def test_non_ascii_core_rejected_through_pipeline(tmp_path, baseline_core_proof):
+    """Audit 2026-08-19 Medium 3 (pipeline level): a core beginning with 0xff
+    is GATE_PROOF_INVALID, not a UnicodeDecodeError."""
+    out = _run_v2(tmp_path, baseline_core_proof, b"\xff" + baseline_core_proof["core"],
+                  baseline_core_proof["lrat"])
+    assert out.status is ProofStatus.GATE_PROOF_INVALID
+    assert "ASCII" in out.detail
 
 
 def test_core_count_mismatch_rejected(tmp_path, baseline_core_proof):

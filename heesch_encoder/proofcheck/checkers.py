@@ -28,6 +28,25 @@ def checker_path(name: str, bin_dir=None) -> pathlib.Path:
     return base / (name + (".exe" if os.name == "nt" else ""))
 
 
+def checker_problem(path) -> str | None:
+    """None iff `path` is a regular, executable file; otherwise the reason.
+    Used by the gate's preflight and by _run so a present-but-unusable binary
+    (mode 0644, a directory, a dangling symlink — audit 2026-08-19 Medium 7)
+    is CHECKER_MISSING / CHECKER_UNAVAILABLE, never a PermissionError out of
+    subprocess.run."""
+    import stat
+
+    try:
+        st = os.stat(path)
+    except OSError as e:
+        return f"{path} not built (tools/build_checkers.sh): {e.strerror or e}"
+    if not stat.S_ISREG(st.st_mode):
+        return f"{path} is not a regular file"
+    if not os.access(path, os.X_OK):
+        return f"{path} is not executable"
+    return None
+
+
 class CheckBudget:
     """Wall-clock budget for one proof check: a per-checker cap plus an
     overall deadline. Every spawn gets min(cap, time left); a non-positive
@@ -91,7 +110,8 @@ _SUCCESS = {
 # The default heap is too small for record-scale instances (a 13 M-clause
 # CNF + 500 MB LRAT reported "CakeML heap space exhausted" on the benchmark
 # runner), so the wrapper sizes the heap from the machine's available memory
-# (70 % of MemAvailable, capped) unless HEESCH_CAKE_HEAP_MB is set. Exhausting
+# (85 % of MemAvailable, clamped to [1, 12] GB) unless HEESCH_CAKE_HEAP_MB is set
+# (a non-numeric override is ignored). Exhausting
 # it is a RESOURCE outcome, never a verdict on the proof.
 CAKE_LPR_HEAP_MB_MAX = 12288
 CAKE_LPR_HEAP_MB_MIN = 1024
@@ -102,7 +122,10 @@ _CAKE_RESOURCE_MARKERS = ("heap space exhausted", "stack space exhausted")
 def cake_lpr_heap_mb() -> int:
     override = os.environ.get("HEESCH_CAKE_HEAP_MB")
     if override:
-        return max(CAKE_LPR_HEAP_MB_MIN, int(override))
+        try:
+            return max(CAKE_LPR_HEAP_MB_MIN, int(override))
+        except ValueError:
+            pass  # misconfiguration is not a crash: fall through to auto sizing
     avail_mb = None
     try:
         with open("/proc/meminfo") as fh:
@@ -120,9 +143,9 @@ def cake_lpr_heap_mb() -> int:
 def _run(name: str, args: list[str], timeout: float, bin_dir=None,
          budget: CheckBudget | None = None) -> CheckResult:
     exe = checker_path(name, bin_dir)
-    if not exe.exists():
-        return CheckResult(name, CheckStatus.CHECKER_MISSING, 0.0,
-                           f"{exe} not built (tools/build_checkers.sh)")
+    problem = checker_problem(exe)
+    if problem is not None:
+        return CheckResult(name, CheckStatus.CHECKER_MISSING, 0.0, problem)
     import time
 
     if budget is not None:
@@ -153,6 +176,12 @@ def _run(name: str, args: list[str], timeout: float, bin_dir=None,
                            "wall-clock timeout")
     except MemoryError:
         return CheckResult(name, CheckStatus.RESOURCE_EXCEEDED, time.time() - t0, "oom")
+    except OSError as e:
+        # Spawn failure (EACCES, ENOEXEC, ENOENT after a TOCTOU race, ...):
+        # the checker is unusable, which is an availability outcome — never a
+        # traceback and never a verdict on the proof.
+        return CheckResult(name, CheckStatus.CHECKER_MISSING, time.time() - t0,
+                           f"{exe}: spawn failed: {e}")
     dt = time.time() - t0
     out = proc.stdout + "\n" + proc.stderr
     if _verdict(out, _SUCCESS[name]):

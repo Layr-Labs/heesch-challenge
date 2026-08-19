@@ -4,6 +4,7 @@ The six-way matrix (each checker x pass/fail) plus the traps: drat-trim's
 non-verdict "c VERIFIED derivation" progress line must not satisfy any
 checker, and NOT VERIFIED overrides everything."""
 
+import os
 import subprocess
 import types
 
@@ -22,24 +23,21 @@ def _fake_run(stdout):
     return run
 
 
+def _fake_exe(path):
+    """A regular, executable placeholder (what the preflight/spawn predicate
+    requires); subprocess.run is patched so it is never actually exec'd."""
+    path.write_text("#!/bin/sh\nexit 0\n")
+    path.chmod(0o755)
+    return path
+
+
 @pytest.fixture
 def with_binary(monkeypatch, tmp_path):
-    """Pretend all checker binaries exist so _run reaches verdict parsing."""
-    class FakePath:
-        def __init__(self, name):
-            self.name = name
-        def exists(self):
-            return True
-        def __str__(self):
-            return self.name
-
-    monkeypatch.setattr(ck, "_BIN", types.SimpleNamespace(
-        __truediv__=lambda self, name: FakePath(name)))
-    # _BIN / name uses __truediv__ on the namespace instance
-    class BinDir:
-        def __truediv__(self, name):
-            return FakePath(name)
-    monkeypatch.setattr(ck, "_BIN", BinDir())
+    """Put executable placeholders for all checkers in place so _run reaches
+    verdict parsing."""
+    monkeypatch.setattr(ck, "_BIN", tmp_path)
+    for n in ck.CHECKER_NAMES:
+        _fake_exe(ck.checker_path(n, tmp_path))
     return monkeypatch
 
 
@@ -79,7 +77,7 @@ def test_cake_lpr_heap_exhaustion_is_resource_not_verdict(monkeypatch, tmp_path)
     RESOURCE_EXCEEDED, never NOT_VERIFIED (seen on the benchmark runner for a
     record-scale LRAT: 'CakeML heap space exhausted.')."""
     monkeypatch.setattr(ck, "_BIN", tmp_path)
-    ck.checker_path("cake_lpr", tmp_path).write_text("")  # .exe on Windows
+    _fake_exe(ck.checker_path("cake_lpr", tmp_path))  # .exe on Windows
     seen = {}
 
     def run(cmd, *a, **k):
@@ -104,3 +102,42 @@ def test_cake_lpr_heap_exhaustion_is_resource_not_verdict(monkeypatch, tmp_path)
 def test_cake_lpr_heap_override(monkeypatch):
     monkeypatch.setenv("HEESCH_CAKE_HEAP_MB", "6000")
     assert ck.cake_lpr_heap_mb() == 6000
+
+
+def test_cake_lpr_heap_override_non_numeric_falls_back(monkeypatch):
+    """Audit 2026-08-19: misconfiguration must not crash the gate."""
+    monkeypatch.setenv("HEESCH_CAKE_HEAP_MB", "lots")
+    assert ck.CAKE_LPR_HEAP_MB_MIN <= ck.cake_lpr_heap_mb() <= ck.CAKE_LPR_HEAP_MB_MAX
+
+
+# --- audit 2026-08-19 Medium 7: unusable checker files are CHECKER_MISSING ---
+
+def test_non_executable_checker_is_missing_not_a_traceback(tmp_path):
+    exe = ck.checker_path("cake_lpr", tmp_path)
+    exe.write_text("not a program")
+    exe.chmod(0o644)
+    if os.access(exe, os.X_OK):
+        pytest.skip("X_OK is not meaningful on this platform (root / Windows)")
+    r = ck.cake_lpr("f.cnf", "p.lrat", bin_dir=tmp_path)
+    assert r.status is ck.CheckStatus.CHECKER_MISSING
+    assert "not executable" in r.detail
+
+
+def test_directory_named_like_a_checker_is_missing(tmp_path):
+    ck.checker_path("drat-trim", tmp_path).mkdir()
+    r = ck.drat_trim("f.cnf", "p.drat", bin_dir=tmp_path)
+    assert r.status is ck.CheckStatus.CHECKER_MISSING
+    assert "regular file" in r.detail
+
+
+def test_spawn_oserror_is_missing(tmp_path, monkeypatch):
+    """Executable bit set but exec fails (ENOEXEC/EACCES at spawn): still a
+    structured availability outcome."""
+    _fake_exe(ck.checker_path("lrat-check", tmp_path))
+
+    def run(*a, **k):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(ck.subprocess, "run", run)
+    r = ck.lrat_check("f.cnf", "p.lrat", bin_dir=tmp_path)
+    assert r.status is ck.CheckStatus.CHECKER_MISSING
+    assert "spawn failed" in r.detail

@@ -95,6 +95,24 @@ def test_missing_checkers_reject_closed(tmp_path):
     assert "REJECTED: CHECKER_UNAVAILABLE" in proc.stdout
 
 
+def test_non_executable_checkers_reject_closed(tmp_path):
+    """Audit 2026-08-19 Medium 7: present-but-unusable checker files (mode
+    0644) must fail the preflight as CHECKER_UNAVAILABLE, not crash later
+    with PermissionError inside subprocess.run."""
+    d = tmp_path / "checkers-0644"
+    d.mkdir()
+    for n in ("drat-trim", "lrat-check", "cake_lpr"):
+        (d / n).write_text("placeholder")
+        (d / n).chmod(0o644)
+    if os.access(d / "cake_lpr", os.X_OK):
+        pytest.skip("X_OK is not meaningful on this platform")
+    text = CENSUS_11 + _block(3, "a" * 64, 1, 1, "p.drat", "drat", "none", "b" * 64)
+    proc, score = _run_harness(tmp_path, text, files=[("p.drat", b"0\n")], checker_dir=d)
+    assert proc.returncode != 0 and score is None
+    assert "REJECTED: CHECKER_UNAVAILABLE" in proc.stdout
+    assert "Traceback" not in proc.stderr
+
+
 def test_census_shape_with_broken_proof_still_rejects(tmp_path):
     baseline = (ROOT / "submission" / "best.heesch").read_text(encoding="ascii")
     text = baseline + _block(1, "a" * 64, 1, 1, "p.drat", "drat", "none", "b" * 64)
