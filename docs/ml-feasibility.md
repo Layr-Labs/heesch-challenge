@@ -142,6 +142,8 @@ available memory) checks it in-band. The 11-omino `F(S,6)` (13.1 M clauses,
 1.45 GB) proof was produced in 3 min 40 s on the laptop (cadical153's DRAT
 was rejected by drat-trim, glucose4's verified — the auto solver fallback). The `F(S,5)` for the
 11-hex is UNSAT in ~30 s and `F(S,4)` SAT in ~8 s. Checker time on the
-resulting instances is bounded separately (`CheckBudget`: drat-trim 600 s,
-cake_lpr 900 s, lrat-check 300 s, 1500 s overall); an honest proof that does
+resulting instances is bounded by `CheckBudget` (drat-trim 600 s,
+cake_lpr 900 s, lrat-check 300 s; 1500 s overall for the whole proof stage,
+of which the encoder may take at most the first 600 s — the encode guard
+covers the encoder call only, architecture §13.5); an honest proof that does
 not fit is `RESOURCE_EXCEEDED`, never scored and never silently accepted.

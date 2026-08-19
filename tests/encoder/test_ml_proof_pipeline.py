@@ -137,3 +137,70 @@ def test_budget_exhausted_does_not_spawn(tmp_path):
     r = ck.drat_trim("x.cnf", "p.drat", bin_dir=d, budget=b)
     assert r.status is ck.CheckStatus.RESOURCE_EXCEEDED
     assert "deadline" in r.detail
+
+
+# --- audit 2026-08-19 Medium 5: the encode guard bounds ONLY the encoder -----
+
+def _has_alarm():
+    import signal
+    import threading
+    return hasattr(signal, "SIGALRM") and threading.current_thread() is threading.main_thread()
+
+
+def test_encode_timeout_is_resource_exceeded(tmp_path, monkeypatch, spy_checkers):
+    if not _has_alarm():
+        pytest.skip("SIGALRM guard is a no-op here")
+    import time
+    import heesch_encoder.multilevel.api as mlapi
+
+    def slow(*a, **k):
+        time.sleep(3)
+        raise AssertionError("encoder should have been interrupted")
+    monkeypatch.setattr(mlapi, "encode_multilevel_stream", slow)
+    tile, grid = _unsat_octomino()
+    proof = tmp_path / "p.drat"
+    proof.write_bytes(b"0\n")
+    out = check_proof_v2(ProofSubmission(str(proof), "0" * 64, 1, 1), tile, grid,
+                         grid.contact("point"), 2, Tier.RECORD, encode_timeout_s=1)
+    assert out.status is ProofStatus.RESOURCE_EXCEEDED
+    assert "encoding F(S,2)" in out.detail
+    assert spy_checkers == []
+
+
+def test_encode_guard_does_not_cover_checkers(tmp_path, monkeypatch):
+    """The guard is disarmed before check_proof_encoded runs: a checker stage
+    longer than encode_timeout_s is NOT interrupted by it (the checkers have
+    their own CheckBudget)."""
+    if not _has_alarm():
+        pytest.skip("SIGALRM guard is a no-op here")
+    import time
+    import heesch_encoder.proofcheck.pipeline as pl
+
+    sentinel = pl.ProofOutcome(ProofStatus.GATE_PROOF_INVALID, "sentinel")
+
+    def slow_checked(*a, **k):
+        time.sleep(2)
+        return sentinel
+    monkeypatch.setattr(pl, "check_proof_encoded", slow_checked)
+    tile, grid = _unsat_octomino()
+    proof = tmp_path / "p.drat"
+    proof.write_bytes(b"0\n")
+    out = pl.check_proof_v2(ProofSubmission(str(proof), "0" * 64, 1, 1), tile, grid,
+                            grid.contact("point"), 2, Tier.RECORD, encode_timeout_s=1)
+    assert out is sentinel
+
+
+def test_encode_limit_is_clipped_to_budget_deadline(tmp_path, monkeypatch):
+    """An exhausted CheckBudget refuses to start the encoder at all."""
+    import heesch_encoder.multilevel.api as mlapi
+    called = []
+    monkeypatch.setattr(mlapi, "encode_multilevel_stream", lambda *a, **k: called.append(1))
+    tile, grid = _unsat_octomino()
+    proof = tmp_path / "p.drat"
+    proof.write_bytes(b"0\n")
+    out = check_proof_v2(ProofSubmission(str(proof), "0" * 64, 1, 1), tile, grid,
+                         grid.contact("point"), 2, Tier.RECORD,
+                         budget=ck.CheckBudget(deadline_seconds=0.0))
+    assert out.status is ProofStatus.RESOURCE_EXCEEDED
+    assert "before encoding" in out.detail
+    assert not called

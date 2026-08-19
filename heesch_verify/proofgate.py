@@ -59,8 +59,13 @@ _CHUNK = 1024 * 1024
 # (measured: F(S,6) of the 11-hex — 112 s encode at 2.5 GB RSS, drat-trim
 # 61 s, lrat-check 16 s on the 513 MB LRAT). See docs/ml-feasibility.md.
 HARNESS_PROOF_BAND = ((12, 6), (20, 5), (50, 3), (100, 2))
-# Wall-clock guard around the encoding step (the checkers have their own
-# CheckBudget); exceeding it is RESOURCE_EXCEEDED, never a crash.
+# Wall-clock guard around the in-process ENCODING step only (pipeline passes
+# it to heesch_encoder.proofcheck.guard); the checkers are bounded separately
+# by the CheckBudget the caller supplies (per-checker caps drat-trim 600 s /
+# cake_lpr 900 s / lrat-check 300 s, overall deadline 1500 s counted from the
+# budget's construction, which the harness does before this gate runs — so the
+# whole proof stage is <= 1500 s end to end, with the encoder allowed at most
+# the first 600 s of it). Exceeding either is RESOURCE_EXCEEDED, never a crash.
 ENCODE_TIMEOUT_S = 600
 
 CHECKER_NAMES = ("drat-trim", "lrat-check", "cake_lpr")
@@ -101,40 +106,6 @@ class ProofVerdict:
             "exact": self.exact,
             "core_clauses": self.core_clauses,
         }
-
-
-class _EncodeTimeout(Exception):
-    pass
-
-
-class _encode_alarm:
-    """SIGALRM-based wall-clock guard where available (POSIX main thread);
-    a no-op elsewhere. The checkers subtract their own elapsed time via
-    CheckBudget, so this bounds the Python encoding step above all."""
-
-    def __init__(self, seconds: int):
-        self.seconds = seconds
-        self.armed = False
-
-    def __enter__(self):
-        import signal
-        import threading
-
-        if hasattr(signal, "SIGALRM") and threading.current_thread() is threading.main_thread():
-            def handler(signum, frame):
-                raise _EncodeTimeout()
-            self._old = signal.signal(signal.SIGALRM, handler)
-            signal.alarm(self.seconds)
-            self.armed = True
-        return self
-
-    def __exit__(self, *exc):
-        if self.armed:
-            import signal
-
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, self._old)
-        return False
 
 
 class ProofFileError(Exception):
@@ -319,18 +290,12 @@ class ProofCarryingGate:
                 declared_format=block.fmt,
             )
             tile = frozenset(canonical_form(sub.cells, sub.grid, True))
-            try:
-                with _encode_alarm(ENCODE_TIMEOUT_S):
-                    out = check_proof_v2(
-                        psub, tile, sub.grid, outcome.contact, m,
-                        tier=Tier.RECORD, bin_dir=self.checker_dir, budget=self.budget,
-                        core_path=(str(core_dst) if core_dst is not None else None),
-                    )
-            except _EncodeTimeout:
-                return ProofVerdict(
-                    ErrorCode.RESOURCE_EXCEEDED,
-                    f"encoding/checking F(S,{m}) exceeded {ENCODE_TIMEOUT_S} s", m=m,
-                )
+            out = check_proof_v2(
+                psub, tile, sub.grid, outcome.contact, m,
+                tier=Tier.RECORD, bin_dir=self.checker_dir, budget=self.budget,
+                core_path=(str(core_dst) if core_dst is not None else None),
+                encode_timeout_s=ENCODE_TIMEOUT_S,
+            )
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
 

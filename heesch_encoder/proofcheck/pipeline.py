@@ -1,7 +1,11 @@
 """The frozen proof-check order of operations (encoder spec §8, arch §13.3):
 
 1. Regenerate the CNF server-side from the shape + verified patch.
-2. Digest match — BEFORE touching any submitted proof bytes.
+2. Digest match — BEFORE any submitted proof byte is parsed, sniffed or
+   handed to a checker. (The harness gate has already streamed, decompressed
+   and hashed the payload to scratch under fixed size caps before step 1 —
+   regenerating F(S, m) is the expensive step, so the cheap bounded
+   materialisation runs first; see architecture §13.3 and THREAT-MODEL A-3.)
 3. Header var/clause counts match.
 4. Size gate.
 5. Format sniff on a bounded window; reject SAT models and empty files.
@@ -140,15 +144,25 @@ def check_proof(sub: ProofSubmission, tile_cells, patch_cells, grid, contact,
 
 def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
                    tier: Tier = Tier.RECORD, timeout: float = 3600.0,
-                   bin_dir=None, budget=None, core_path=None) -> ProofOutcome:
+                   bin_dir=None, budget=None, core_path=None,
+                   encode_timeout_s: float | None = None) -> ProofOutcome:
     """v2 path: regenerate the multilevel F(S, m) then the same frozen
     steps. UNSAT verified here means no weak m-configuration exists —
     Hh <= m-1 over ALL patches (multilevel spec §2.2).
 
     The feasibility band (multilevel spec §10.2, measured policy) is enforced BEFORE
     encoding: outside it the answer is RESOURCE_EXCEEDED by policy, so the
-    server never starts an encoding it cannot finish."""
+    server never starts an encoding it cannot finish.
+
+    `encode_timeout_s` bounds ONLY the in-process encoding step (guard.py);
+    it is additionally clipped to the budget's remaining time. The checkers
+    are bounded by `budget` (CheckBudget caps + overall deadline), never by
+    this guard — audit 2026-08-19 Medium 5."""
+    import math
+    import time
+
     from ..multilevel.api import encode_multilevel_stream, in_feasibility_band
+    from .guard import EncodeTimeout, wall_clock_guard
 
     n_cells = len(frozenset(tile_cells))
     if not in_feasibility_band(n_cells, m):
@@ -156,12 +170,25 @@ def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
             ProofStatus.RESOURCE_EXCEEDED,
             f"({n_cells} cells, m={m}) is outside the encoder feasibility band",
         )
+    limit = math.inf if encode_timeout_s is None else float(encode_timeout_s)
+    if budget is not None:
+        limit = min(limit, budget.deadline - time.monotonic())
+    if limit <= 0:
+        return ProofOutcome(ProofStatus.RESOURCE_EXCEEDED,
+                            "proof-check deadline exhausted before encoding")
     # Stream the regenerated CNF to scratch: peak memory is then the universe,
     # not the formula (F(S,6) of an 11-cell shape is 17M clauses / 2 GB, and
     # materialising it took ~15 GB).
     with tempfile.TemporaryDirectory(prefix="heesch-cnf-") as td:
-        enc = encode_multilevel_stream(tile_cells, grid, contact, m,
-                                       os.path.join(td, "regenerated.cnf"))
+        try:
+            with wall_clock_guard(limit):
+                enc = encode_multilevel_stream(tile_cells, grid, contact, m,
+                                               os.path.join(td, "regenerated.cnf"))
+        except EncodeTimeout:
+            return ProofOutcome(
+                ProofStatus.RESOURCE_EXCEEDED,
+                f"encoding F(S,{m}) for {n_cells} cells exceeded {limit:.0f} s",
+            )
         return check_proof_encoded(sub, enc, tier=tier, timeout=timeout,
                                    bin_dir=bin_dir, budget=budget, core_path=core_path)
 

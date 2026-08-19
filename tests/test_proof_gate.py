@@ -290,6 +290,34 @@ def test_tampered_proof_is_rejected(tmp_path, unsat_proof):
     assert "REJECTED: GATE_PROOF_INVALID" in proc.stdout or "REJECTED: PROOF_TRUNCATED" in proc.stdout
 
 
+def test_checker_cap_is_the_checkers_own_budget(tmp_path, unsat_proof):
+    """Audit 2026-08-19 Medium 5: a slow checker is bounded by CheckBudget
+    (per-checker cap / overall deadline) and reported as a checker resource
+    limit — not by the 600 s encode guard, which no longer spans the checkers."""
+    import stat as stat_mod
+    from heesch_encoder.proofcheck.checkers import CheckBudget
+
+    d = checker_dir_for_tests(tmp_path)
+    if d is None:
+        pytest.skip("tools/bin checkers not built")
+    slow = d / "cake_lpr"
+    slow.write_text("#!/bin/sh\nsleep 5\necho 's VERIFIED UNSAT'\n")
+    slow.chmod(slow.stat().st_mode | stat_mod.S_IXUSR)
+    enc = unsat_proof["enc"]
+    subdir = tmp_path / "submission"
+    subdir.mkdir(exist_ok=True)
+    (subdir / "p.drat").write_bytes(unsat_proof["drat"])
+    text = CENSUS_11 + _block(3, enc.digest, enc.num_vars, enc.num_clauses, "p.drat", "drat",
+                              "none", unsat_proof["sha"])
+    out = verify_witness(text)
+    import heesch_verify.proofgate as pg
+    assert pg.ENCODE_TIMEOUT_S == 600  # the encode guard is not what fires here
+    v = ProofCarryingGate(subdir, d, CheckBudget(per_checker={"cake_lpr": 1})).check(out.submission, out)
+    assert v.code is ErrorCode.RESOURCE_EXCEEDED
+    assert "checker resource limit" in v.detail and "cake_lpr" in v.detail
+    assert "encoding" not in v.detail
+
+
 def test_cli_check_proof_matches_harness(tmp_path, unsat_proof):
     d = checker_dir_for_tests(tmp_path)
     if d is None:

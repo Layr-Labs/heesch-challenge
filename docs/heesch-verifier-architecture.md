@@ -344,17 +344,27 @@ that list — so the checkers load only the clauses the proof uses (measured
    (a witness deeper than the proof allows is a contradiction; never
    "corrected").
 2. Checker preflight: `drat-trim`, `lrat-check`, `cake_lpr` all present as
-   regular files in the checker directory, else `CHECKER_UNAVAILABLE`.
+   regular, executable files in the checker directory (the same predicate
+   the spawn applies; a spawn-time `OSError` is also `CHECKER_UNAVAILABLE`),
+   else `CHECKER_UNAVAILABLE`.
 3. Bands: in-harness band `HARNESS_PROOF_BAND = ((12,6),(20,5),(50,3),(100,2))`
    (cells, max m) and the encoder feasibility band
    (`multilevel.api.FEASIBILITY_BAND`, measured policy), else `RESOURCE_EXCEEDED`
-   before any encoding; the encoding step is additionally wall-clock guarded
-   (600 s → `RESOURCE_EXCEEDED`).
+   before any encoding; the in-process encoding step is additionally
+   wall-clock guarded (`ENCODE_TIMEOUT_S = 600` s, applied to the encoder
+   call only — `heesch_encoder/proofcheck/guard.py` — and clipped to the
+   checker budget's remaining time; → `RESOURCE_EXCEEDED`). The checkers are
+   NOT under this guard; they are bounded by §13.5.
 4. Proof file: `lstat`/`open(O_NOFOLLOW)`/`fstat` regular-file discipline,
    stored size ≤ 48 MiB, streamed into scratch (`TMPDIR`) under a fixed safe
    name, xz decompressed with `lzma` (memlimit 256 MiB, decompressed cap
-   256 MiB, no trailing data), sha256 compared with the block
-   (`PROOF_FILE_INVALID`, `RESOURCE_EXCEEDED`, `PROOF_FILE_DIGEST_MISMATCH`).
+   1 GiB — `PROOF_MAX_PAYLOAD_BYTES`, no trailing data), sha256 compared with
+   the block (`PROOF_FILE_INVALID`, `RESOURCE_EXCEEDED`,
+   `PROOF_FILE_DIGEST_MISMATCH`). This bounded materialisation deliberately
+   precedes the CNF regeneration of step 5: regenerating `F(S, m)` is the
+   expensive step (up to 600 s, GBs of scratch) and must not be triggerable
+   more cheaply than the capped decompression; the proof bytes are never
+   parsed, sniffed or passed to a checker before the digest in step 5 matches.
 5. Regenerate `F(S, m)` (streamed to scratch); digest match
    (`PROOF_CNF_DIGEST_MISMATCH`), header match (`PROOF_HEADER_MISMATCH`), argv
    guard, size gate, format sniff on bounded windows (`GATE_PROOF_INVALID` for
@@ -391,8 +401,15 @@ for library/tests only.
 `checkers.CheckBudget`: per-checker caps drat-trim 600 s, cake_lpr 900 s,
 lrat-check 300 s, overall deadline 1500 s; each spawn gets
 `min(cap, deadline - now)`; a non-positive remainder is `RESOURCE_EXCEEDED`
-without spawning. Together with the witness stage and the encoding this fits
-the 30-minute benchmark job.
+without spawning. The harness constructs the budget before the gate runs,
+so the 1500 s deadline spans the whole proof stage (proof materialisation,
+encoding, checkers): the encoder may use at most the first
+`min(600, remaining)` s of it (§13.3 step 3), the checkers share what is
+left, each under its own cap. Worst case the proof stage is 25 min, leaving
+~5 min of the 30-minute benchmark job for witness verification and
+start-up. On platforms without `SIGALRM` (Windows, non-main threads) the
+encode guard is a no-op and the deadline alone bounds the stage (an
+over-long encode leaves no time for a checker to spawn → `RESOURCE_EXCEEDED`).
 
 ### 13.6 Round-trip oracle
 `patch.check_corona(..., hole_mode="none")` is the hole-agnostic geometric

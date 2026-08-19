@@ -99,10 +99,17 @@ separately by SHA-pinned actions, hash-pinned vendored sources, and
 - **A-3 encoding**: `F(S, m)` inside the in-harness band only (≤ 12 cells
   m ≤ 6, ≤ 20 m ≤ 5, ≤ 50 m ≤ 3, ≤ 100 m ≤ 2), measured (up to ~3 min /
   2 GB DIMACS at 2.5 GB RSS with the streamed encoder) and additionally
-  wall-clock guarded (600 s → `RESOURCE_EXCEEDED`); larger is rejected
+  wall-clock guarded (the encoder call only: 600 s, clipped to the checker
+  budget's remaining time → `RESOURCE_EXCEEDED`); larger is rejected
   before work. Proof payloads up to 1 GiB decompressed land on scratch disk,
-  never in memory.
-- **A-4 checkers/disk**: caps + deadline; drat-trim's LRAT emission can reach
+  never in memory. Order: the payload is streamed/decompressed/hashed to
+  scratch under these caps BEFORE the CNF is regenerated — it is never
+  parsed or handed to a checker until the regenerated digest matches — because
+  regenerating `F(S, m)` is the expensive step and a bogus digest must not be
+  able to trigger it more cheaply than the bounded decompression.
+- **A-4 checkers/disk**: caps + deadline (`CheckBudget`: drat-trim 600 s,
+  cake_lpr 900 s, lrat-check 300 s, 1500 s overall for the whole proof
+  stage); drat-trim's LRAT emission can reach
   low GB for a 256 MiB DRAT — the runner has the space; a proof designed to
   be slow simply times out (`RESOURCE_EXCEEDED`, no score).
 
