@@ -90,5 +90,15 @@ def test_gate_uses_its_profile_band(tmp_path):
     assert v.code is ErrorCode.RESOURCE_EXCEEDED and "standard profile" in v.detail
     # record: m = 7 passes the band and proceeds to the next cheap check
     # (payload digest mismatch) — the certificate is admitted in-harness.
-    v = ProofCarryingGate(subdir, chk, profile=pf.RECORD).check(out.submission, out)
+    # (min_scratch_bytes=0: this test machine's disk is not the record runner's;
+    # the scratch gate itself is exercised below.)
+    import dataclasses
+    record_here = dataclasses.replace(pf.RECORD, min_scratch_bytes=0)
+    v = ProofCarryingGate(subdir, chk, profile=record_here).check(out.submission, out)
     assert v.code is ErrorCode.PROOF_FILE_DIGEST_MISMATCH, v.detail
+    # Scratch gate: a profile demanding more free scratch than any disk has
+    # refuses cleanly before materialising anything.
+    huge = dataclasses.replace(pf.STANDARD, min_scratch_bytes=1 << 60,
+                               harness_band=((12, 8),))
+    v = ProofCarryingGate(subdir, chk, profile=huge).check(out.submission, out)
+    assert v.code is ErrorCode.RESOURCE_EXCEEDED and "scratch" in v.detail

@@ -108,7 +108,7 @@ def test_oversized_proof_is_resource_exceeded(tmp_path, spy_checkers, monkeypatc
     sub = ProofSubmission(proof, enc.digest, enc.num_vars, enc.num_clauses)
     out = check_proof(sub, tile, patch, grid, contact, Tier.RECORD)
     assert out.status is ProofStatus.RESOURCE_EXCEEDED
-    assert "requeue" in out.detail
+    assert "cap" in out.detail
     assert spy_checkers == []
 
 
