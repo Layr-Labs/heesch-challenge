@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   measure:
-    runs-on: ${{ fromJSON(format('["self-hosted","linux","x64","{0}"]', inputs.runner)) }}
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 600
     env:
       HEESCH_SCRATCH: ${{ vars.HEESCH_SCRATCH || '/tmp' }}

@@ -13,14 +13,16 @@ concurrency:
 
 jobs:
   benchmark:
-    # The dedicated record runner (docs/RUNNER.md): >= 8 vCPU, >= 64 GB RAM,
-    # >= 200 GB NVMe scratch. The harness derives its resource profile from
-    # the machine (heesch_verify/profile.py: `record` iff MemAvailable >= 56 GiB
-    # and scratch >= 150 GiB) — the band that admits F(S,7) for 11-20-cell
+    # The record runner (docs/RUNNER.md): a GitHub larger runner named
+    # `heesch-record` (8-core / 32 GB / 300 GB SSD; billed only while a job
+    # runs) — the same label also matches an equivalent self-hosted box. The
+    # harness derives its resource profile from the machine
+    # (heesch_verify/profile.py: `record` iff MemAvailable >= 24 GiB and
+    # scratch free >= 60 GiB) — the band that admits F(S,7) for 11-20-cell
     # shapes (an Hc = 5, Hh = 6 certificate) and F(S,8) for <= 12 cells. The
     # preflight below FAILS the job on a smaller machine rather than letting
     # it silently score under the narrow `standard` profile.
-    runs-on: [self-hosted, linux, x64, heesch-record]
+    runs-on: heesch-record
     timeout-minutes: 240
 
     env:

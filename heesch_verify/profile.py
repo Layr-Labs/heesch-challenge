@@ -10,7 +10,8 @@ runner (docs/RUNNER.md) and the harness scales its budgets to it. The profile
 is derived from the machine (`/proc/meminfo` MemAvailable and the free space
 of TMPDIR), never from a participant-controllable input: participants can only
 edit `submission/`, and the workflow preflight asserts the runner meets the
-`record` minima before any scoring. A smaller machine silently gets the
+`record` minima (MemAvailable >= 24 GiB, scratch free >= 60 GiB — an
+8-core / 32 GB runner) before any scoring. A smaller machine silently gets the
 `standard` profile — the same fail-closed rule, narrower band — and the
 selected profile is written into score.json (`resource_profile`).
 
@@ -88,13 +89,16 @@ STANDARD = ResourceProfile(
     min_scratch_free_bytes=0,
 )
 
-# The dedicated record runner (docs/RUNNER.md: >= 8 vCPU, >= 64 GB RAM,
-# >= 200 GB NVMe scratch, 4-hour job). Band rows are set from measurements
-# (docs/ml-feasibility.md): F(S,7) at 11–16 cells is 36–77 M clauses / 4–8.5 GB
-# DIMACS / 3–7 laptop-minutes / <= 8 GB RSS; F(S,8) at 12 cells ~75 M; a
-# 20-cell F(S,7) ~120 M clauses / 13 GB / ~10 min / ~12 GB RSS — all inside
-# the 3600 s encode guard and 150 GB scratch with large margin. (20, 8)
-# (~250 M clauses, 27 GB, ~20 min) is added once the runner timing confirms it.
+# The record runner (docs/RUNNER.md: an 8-core / 32 GB GitHub larger runner
+# named `heesch-record`, or an equivalent self-hosted box; 4-hour job). Band
+# rows are set from measurements (docs/ml-feasibility.md): F(S,7) at 11–16
+# cells is 36–77 M clauses / 4–8.5 GB DIMACS / 3–7 laptop-minutes / <= 8 GB
+# RSS; F(S,8) at 12 cells ~75 M / ~6-8 GB; a 20-cell F(S,7) ~120 M clauses /
+# 13 GB / ~10 min / ~12 GB RSS — all inside a 32 GB machine, the 3600 s
+# encode guard and 60 GB of scratch. F(S,8) rows above 12 cells enter the
+# band only after measure.yml times them on the runner (13–16 cells ~9–15 GB
+# RSS should fit; (20, 8) at ~25 GB RSS wants the 64 GB runner tier — a
+# one-line runs-on upgrade).
 RECORD = ResourceProfile(
     name="record",
     harness_band=((12, 8), (20, 7), (50, 4), (100, 3), (200, 2)),
@@ -106,10 +110,10 @@ RECORD = ResourceProfile(
     max_proof_bytes=32 * GiB,
     core_max_clauses=32_000_000,
     core_max_bytes=4 * GiB,
-    cake_heap_max_mb=49152,
-    min_scratch_bytes=64 * GiB,
-    min_mem_available_bytes=56 * GiB,
-    min_scratch_free_bytes=150 * GiB,
+    cake_heap_max_mb=24576,
+    min_scratch_bytes=32 * GiB,
+    min_mem_available_bytes=24 * GiB,
+    min_scratch_free_bytes=60 * GiB,
 )
 
 PROFILES = {p.name: p for p in (STANDARD, RECORD)}

@@ -408,8 +408,8 @@ for library/tests only.
 ### 13.5 Budgets — resource profiles
 Every budget of the proof path comes from ONE place, `heesch_verify/profile.py`,
 selected by the machine the harness runs on (`profile.detect()`: `record`
-iff MemAvailable ≥ 56 GiB and the scratch disk has ≥ 150 GiB free, else
-`standard`). The selected profile is written into `score.json`
+iff MemAvailable ≥ 24 GiB and the scratch disk has ≥ 60 GiB free — the
+8-core / 32 GB record runner — else `standard`). The selected profile is written into `score.json`
 (`resource_profile`). The profile is never read from an environment
 variable or a participant input — the machine is the policy, and the
 benchmark workflow's preflight (`tools/runner_preflight.py --require
@@ -425,8 +425,8 @@ minima rather than letting it silently score under the narrow profile.
 | proof / core file as submitted | 48 MiB | 200 MiB (× 2 + shape ≤ `maxSubmissionBytes` 512 MiB) |
 | decompressed payload (scratch disk) | 1 GiB | 8 GiB |
 | core list | 4 M clauses / 512 MiB | 32 M clauses / 4 GiB |
-| `cake_lpr` heap cap (85 % of MemAvailable, clamped) | 12 GB | 48 GB |
-| scratch required before encoding | 8 GiB | 64 GiB |
+| `cake_lpr` heap cap (85 % of MemAvailable, clamped) | 12 GB | 24 GB |
+| scratch required before encoding | 8 GiB | 32 GiB |
 | job timeout (workflow) | 30 min | 240 min |
 
 `checkers.CheckBudget`: each spawn gets `min(cap, deadline - now)`; a
@@ -442,9 +442,11 @@ instances finish in 5–20 min (`docs/ml-feasibility.md`).
 
 The record band is set from measurements, not hope: `F(S,7)` at 11–16 cells
 is 36–77 M clauses / 4–8.5 GB DIMACS / 3–7 laptop-minutes / ≤ 8 GB RSS;
-`F(S,8)` at ≤ 12 cells ~75 M; a 20-cell `F(S,7)` ~120 M / 13 GB / ~10 min /
-~12 GB — all far inside the `record` envelope. `(20, 8)` (~250 M clauses,
-27 GB) enters the band once `measure.yml` has timed it on the runner.
+`F(S,8)` at ≤ 12 cells ~75 M / ~6–8 GB; a 20-cell `F(S,7)` ~120 M / 13 GB /
+~10 min / ~12 GB — all inside the 32 GB `record` envelope. `F(S,8)` above
+12 cells enters the band once `measure.yml` has timed it on the runner
+(13–16 cells ~9–15 GB RSS should fit; `(20, 8)` at ~25 GB RSS wants the
+64 GB runner tier, a one-line `runs-on` upgrade).
 Widening a profile is measured policy (§13.9 step 3), not an encoder
 revision.
 

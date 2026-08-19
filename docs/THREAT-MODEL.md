@@ -119,10 +119,10 @@ separately by SHA-pinned actions, hash-pinned vendored sources, and
 - **A-4 checkers/disk**: caps + deadline per profile (`CheckBudget`:
   `record` drat-trim 3600 s, cake_lpr 3600 s, lrat-check 1800 s, 9000 s
   overall; `standard` 600 / 900 / 300 s, 1500 s overall); drat-trim's LRAT
-  emission can reach low GB (the regenerated DIMACS itself is up to ~27 GB at
+  emission can reach low GB (the regenerated DIMACS itself is up to ~13 GB at
   the record band's edge, written once — the pipeline reuses the streamed
-  file) — the record runner's ≥ 150 GiB scratch has the space and the
-  profile refuses to start below 64 GiB free; a proof designed to be slow
+  file) — the record runner's ≥ 60 GiB free scratch has the space and the
+  profile refuses to start below 32 GiB free; a proof designed to be slow
   simply times out (`RESOURCE_EXCEEDED`, no score).
 
 ## 6. Residual risks (accepted, documented)

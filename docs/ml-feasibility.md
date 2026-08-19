@@ -201,7 +201,8 @@ Extrapolating (the 16-hex is the largest known `Hc = 4` polyhex but the
 ### Resource profiles (heesch_verify/profile.py) — what the benchmark admits
 
 These numbers are why the benchmark runs on a dedicated runner
-(`docs/RUNNER.md`, ≥ 8 vCPU / 64 GB / 200 GB NVMe / 240-min job) under the
+(`docs/RUNNER.md`, an 8-core / 32 GB GitHub larger runner named
+`heesch-record`, 240-min job) under the
 `record` profile: in-harness band `(12, 8) (20, 7) (50, 4) (100, 3) (200, 2)`,
 encode guard 3600 s, checker deadline 9000 s, payload 8 GiB, core 32 M
 clauses — every record certificate (`F(S,7)` to 20 cells, `F(S,8)` to 12)
@@ -210,6 +211,8 @@ profile (`(12, 6) (20, 5) (50, 3) (100, 2)`, 600 s, 1500 s, 1 GiB).
 
 **Runner measurements (pending).** `.github/workflows/measure.yml`
 (`tools/measure_record_cycle.py`) times the full cycle on the record runner;
-its rows go here. `(20, 8)` joins the record band once measured there.
+its rows go here. `F(S,8)` above 12 cells joins the record band once
+measured there (13–16 cells ~9–15 GB RSS should fit the 32 GB runner;
+`(20, 8)` at ~25 GB RSS needs the 64 GB tier).
 `.github/workflows/record-e2e.yml` scores an `F(S,7)` proof in-harness on
 every run.

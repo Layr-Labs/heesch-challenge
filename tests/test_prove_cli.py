@@ -117,6 +117,9 @@ def test_happy_path_installs_atomically_and_cleans_up(prove, subdir):
 
 # --- Plan 3 P4: external solver binary (DRAT streams to disk) ----------------
 
+pytestmark_solver_bin = pytest.mark.skipif(os.name == "nt", reason="sh-script fake solver")
+
+
 def _fake_solver(tmp_path, rc, drat_text=None):
     """A stand-in for cadical/kissat: `<bin> -q --no-binary formula.cnf proof.drat`."""
     exe = tmp_path / "fake-solver"
@@ -129,6 +132,7 @@ def _fake_solver(tmp_path, rc, drat_text=None):
     return exe
 
 
+@pytestmark_solver_bin
 def test_solver_bin_unsat_path(prove, tmp_path):
     work = tmp_path / "w"
     work.mkdir()
@@ -138,6 +142,7 @@ def test_solver_bin_unsat_path(prove, tmp_path):
     assert sat is False and drat.read_text() == "1 0\n0\n"
 
 
+@pytestmark_solver_bin
 def test_solver_bin_sat_and_error_paths(prove, tmp_path):
     work = tmp_path / "w"
     work.mkdir()

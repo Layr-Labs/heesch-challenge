@@ -82,10 +82,13 @@ def test_gate_uses_its_profile_band(tmp_path):
     chk = tmp_path / "no-checkers"
     # standard: m = 7 at 11 cells is outside the band — but the checker
     # preflight comes first, so use a fake executable checker dir.
+    from heesch_encoder.proofcheck.checkers import checker_path
+
     chk.mkdir()
     for n in ("drat-trim", "lrat-check", "cake_lpr"):
-        (chk / n).write_text("#!/bin/sh\nexit 0\n")
-        (chk / n).chmod(0o755)
+        exe = checker_path(n, chk)  # .exe suffix on Windows
+        exe.write_text("#!/bin/sh\nexit 0\n")
+        exe.chmod(0o755)
     v = ProofCarryingGate(subdir, chk, profile=pf.STANDARD).check(out.submission, out)
     assert v.code is ErrorCode.RESOURCE_EXCEEDED and "standard profile" in v.detail
     # record: m = 7 passes the band and proceeds to the next cheap check

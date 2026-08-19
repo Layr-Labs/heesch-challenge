@@ -45,10 +45,11 @@ the `record` profile's are in the next paragraph. Encoder feasibility band
 `((12,8),(20,7),(50,4),(100,3),(200,2))`.
 
 **Record path — in-harness (Plan 3, 2026-08-19).** The benchmark job runs on
-a dedicated self-hosted runner (`docs/RUNNER.md`: ≥ 8 vCPU, 64 GB, 200 GB
-NVMe, 240-min job, label `heesch-record`, fail-loud preflight). Every
+the record runner (`docs/RUNNER.md`: a GitHub larger runner named
+`heesch-record`, 8-core / 32 GB / 300 GB SSD, billed per-minute — or an
+equivalent self-hosted box; 240-min job, fail-loud preflight). Every
 proof-path budget comes from `heesch_verify/profile.py`, selected by the
-machine (`record` iff MemAvailable ≥ 56 GiB and scratch ≥ 150 GiB, else
+machine (`record` iff MemAvailable ≥ 24 GiB and scratch free ≥ 60 GiB, else
 `standard`; `resource_profile` in `score.json`). The `record` band
 `(12,8) (20,7) (50,4) (100,3) (200,2)` admits `F(S,7)` — the `Hc = 5, Hh = 6`
 certificate — for every record-candidate size and `F(S,8)` to 12 cells;
@@ -117,13 +118,16 @@ and found no false-acceptance route.
 - `F(S,7)` for the Kaplan `Hc = 4` 11-hex: **done 2026-08-19** (laptop).
   `F(S,5..7)` counts for the 13/15/16-hex `Hc = 4` shapes: **done 2026-08-19**
   (`docs/ml-feasibility.md`). These set the `record` profile's band.
-- **Pending (needs the runner registered, `docs/RUNNER.md`):** dispatch
-  `measure.yml` for 11-hex m=7/8, 13-hex m=7, 16-hex m=7/8 and a 20-iamond
-  m=6/7/8 on `heesch-record`; paste the rows into `ml-feasibility.md`; add
-  `(20, 8)` to `RECORD.harness_band` (+ `FEASIBILITY_BAND`, addendum,
-  tests) iff it fits. Then dispatch `record-e2e.yml` (the acceptance test:
-  an `F(S,7)` proof scored in-harness with `resource_profile=record`) and
-  `benchmark.yml` on the baseline.
+- **Pending (needs the `heesch-record` larger runner created,
+  `docs/RUNNER.md`):** dispatch `measure.yml` for 11-hex m=7/8, 13-hex m=7,
+  16-hex m=7/8 and a 20-iamond m=6/7 on `heesch-record`; paste the rows into
+  `ml-feasibility.md`; widen `RECORD.harness_band` with the `F(S,8)` rows
+  that fit the 32 GB runner (+ `FEASIBILITY_BAND`, addendum, tests). Then
+  dispatch `record-e2e.yml` (the acceptance test: an `F(S,7)` proof scored
+  in-harness with `resource_profile=record`) and `benchmark.yml` on the
+  baseline. `Hc = 6, Hh = 7` at 17–20 cells (`F(S,8)`, ~25 GB RSS) needs the
+  64 GB runner tier — a one-line `runs-on` upgrade if such a candidate
+  appears.
 
 ## 5. Plan 2 — done 2026-08-19
 

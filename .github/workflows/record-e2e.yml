@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   record-e2e:
-    runs-on: [self-hosted, linux, x64, heesch-record]
+    runs-on: heesch-record
     timeout-minutes: 240
     env:
       HEESCH_SCRATCH: ${{ vars.HEESCH_SCRATCH || '/tmp' }}
