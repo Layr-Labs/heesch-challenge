@@ -174,9 +174,15 @@ def test_encode_guard_does_not_cover_checkers(tmp_path, monkeypatch):
     if not _has_alarm():
         pytest.skip("SIGALRM guard is a no-op here")
     import time
+    import heesch_encoder.multilevel.api as mlapi
     import heesch_encoder.proofcheck.pipeline as pl
 
     sentinel = pl.ProofOutcome(ProofStatus.GATE_PROOF_INVALID, "sentinel")
+
+    # Instant stub encoder (a real encode can exceed the 1 s test limit on a
+    # slow CI runner, which would be the guard firing legitimately); only the
+    # checker stage is slow here.
+    monkeypatch.setattr(mlapi, "encode_multilevel_stream", lambda *a, **k: object())
 
     def slow_checked(*a, **k):
         time.sleep(2)

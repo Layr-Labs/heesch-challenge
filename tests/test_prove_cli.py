@@ -64,11 +64,13 @@ def test_illegal_out_is_refused_before_any_work(prove, subdir, monkeypatch, caps
 
 def test_existing_output_needs_force(prove, subdir, monkeypatch, capsys):
     _never_encode(monkeypatch, prove)
-    (subdir / "proof.lrat.xz").write_bytes(b"old")
-    rc = prove.main([str(subdir / "best.heesch")])
+    # --format drat: its default name needs no drat-trim (which may not be
+    # built, e.g. on Windows CI, where lrat would fall back to drat).
+    (subdir / "proof.drat.xz").write_bytes(b"old")
+    rc = prove.main([str(subdir / "best.heesch"), "--format", "drat"])
     assert rc == 1
     assert "--force" in capsys.readouterr().err
-    assert (subdir / "proof.lrat.xz").read_bytes() == b"old"
+    assert (subdir / "proof.drat.xz").read_bytes() == b"old"
 
 
 def test_non_ascii_shape_refused_up_front(prove, subdir, monkeypatch, capsys):
