@@ -245,6 +245,17 @@ def solve_with_proof(cnf, solver: str, workdir: pathlib.Path) -> tuple[bool, pat
     return False, drat_path
 
 
+def _fail(msg: str) -> int:
+    print(f"error: {msg}", file=sys.stderr)
+    return 1
+
+
+def _xz_into(src: pathlib.Path, dst: pathlib.Path) -> None:
+    with open(src, "rb") as fh_in, lzma.open(dst, "wb", preset=6) as fh_out:
+        for chunk in iter(lambda: fh_in.read(1 << 20), b""):
+            fh_out.write(chunk)
+
+
 def main(argv=None) -> int:
     if argv is None and len(sys.argv) >= 6 and sys.argv[1] == "--worker":
         _worker(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
@@ -258,7 +269,11 @@ def main(argv=None) -> int:
     ap.add_argument("--xz", dest="xz", action="store_true", default=True,
                     help="store the proof xz-compressed (default)")
     ap.add_argument("--no-xz", dest="xz", action="store_false")
-    ap.add_argument("--out", default=None, help="proof file name (basename, next to the shape file)")
+    ap.add_argument("--out", default=None,
+                    help="proof file name: a plain basename, written next to the shape file "
+                         "(no directories; must end in .<format>[.xz]; never best.heesch)")
+    ap.add_argument("--force", action="store_true",
+                    help="overwrite an existing proof/core file of the same name")
     ap.add_argument("--solver", default="auto",
                     help="pysat solver name, or 'auto' (default): try cadical153, glucose4, "
                          "cadical195, lingeling in turn and keep the first DRAT that drat-trim "
@@ -273,20 +288,63 @@ def main(argv=None) -> int:
     ap.add_argument("--check", action="store_true", help="run the harness's ProofCarryingGate afterwards")
     args = ap.parse_args(argv)
 
+    from heesch_verify.parse import (
+        parse_submission, validate_core_basename, validate_proof_basename,
+    )
+    from heesch_verify.result import VerifyError
+
+    # ---- Resolve and validate every output name BEFORE any work (audit
+    # 2026-08-19 High 2: `--out ../x.lrat` escaped the submission directory and
+    # `--out best.heesch` overwrote the shape; both only failed afterwards).
     shape_path = pathlib.Path(args.shape_file).resolve()
-    text = shape_path.read_text(encoding="utf-8")
+    if not shape_path.is_file():
+        return _fail(f"{shape_path} is not a file")
+    dest_dir = shape_path.parent
+    try:
+        text = shape_path.read_text(encoding="ascii")
+    except UnicodeDecodeError as e:
+        return _fail(f"{shape_path.name} is not ASCII ({e}); the harness rejects it")
+    comp = "xz" if args.xz else "none"
+    fmt = args.format
+
+    from heesch_encoder.proofcheck.checkers import checker_path
+    checker_dir = pathlib.Path(os.environ.get("HEESCH_CHECKER_DIR") or (ROOT / "tools" / "bin"))
+    drat_trim = checker_path("drat-trim", checker_dir)
+    have_trim = drat_trim.exists()
+    if fmt == "lrat" and not have_trim:
+        if args.out is not None:
+            return _fail(f"{drat_trim} not built (bash tools/build_checkers.sh), so an LRAT cannot "
+                         f"be produced; build it, or pass --format drat with a matching --out name")
+        print(f"warning: {drat_trim} not built (bash tools/build_checkers.sh); "
+              "falling back to --format drat without a self-check", file=sys.stderr)
+        fmt = "drat"
+    want_core = fmt == "lrat" and not args.no_core
+
+    name = args.out if args.out is not None else ("proof." + fmt + (".xz" if args.xz else ""))
+    core_name = ("core.txt" + (".xz" if args.xz else "")) if want_core else None
+    try:
+        validate_proof_basename(name, fmt, comp, forbid=("best.heesch", shape_path.name))
+        if core_name is not None:
+            validate_core_basename(core_name, comp, proof_name=name)
+    except VerifyError as e:
+        return _fail(f"--out: {e}")
+    for out_name in filter(None, (name, core_name)):
+        target = dest_dir / out_name
+        if target.resolve().parent != dest_dir.resolve():
+            return _fail(f"--out {out_name!r} does not stay inside {dest_dir}")
+        if target.exists() and not args.force:
+            return _fail(f"{target} exists; pass --force to overwrite it")
+
     body = strip_proof_block(text)
     outcome = verify_witness(body, VerifyConfig())
     sub = outcome.submission
     hh = outcome.result.hh_verified
     m = args.m if args.m is not None else hh + 1
     if m < hh + 1:
-        print(f"error: m={m} but the witness verifies hh={hh}; need m >= {hh + 1}", file=sys.stderr)
-        return 1
+        return _fail(f"m={m} but the witness verifies hh={hh}; need m >= {hh + 1}")
     n = len(sub.cells)
     if not in_feasibility_band(n, m):
-        print(f"error: ({n} cells, m={m}) is outside the encoder feasibility band", file=sys.stderr)
-        return 1
+        return _fail(f"({n} cells, m={m}) is outside the encoder feasibility band")
     if not in_harness_band(n, m):
         print(f"warning: ({n} cells, m={m}) is outside the in-harness proof band "
               f"{HARNESS_PROOF_BAND}; the harness will answer RESOURCE_EXCEEDED", file=sys.stderr)
@@ -294,126 +352,118 @@ def main(argv=None) -> int:
     try:
         import pysat  # noqa: F401
     except ImportError:
-        print("error: python-sat not installed (pip install -e '.[prove]')", file=sys.stderr)
-        return 1
-    name = args.out or ("proof." + args.format + (".xz" if args.xz else ""))
-    dest_dir = shape_path.parent
-    tmpdir = dest_dir / ".prove-tmp"
-    tmpdir.mkdir(exist_ok=True)
-    tile = frozenset(canonical_form(sub.cells, sub.grid, True))
-    print(f"encoding F(S,{m}) for {n} cells (streamed to disk) ...", flush=True)
-    enc = encode_multilevel_stream(tile, sub.grid, outcome.contact, m, tmpdir / "formula.cnf")
-    print(f"  {enc.num_vars} vars, {enc.num_clauses} clauses, {enc.cnf_bytes/1e6:.0f} MB, "
-          f"digest {enc.digest[:16]}…", flush=True)
-    from heesch_encoder.proofcheck.checkers import checker_path
-    drat_trim = checker_path("drat-trim", os.environ.get("HEESCH_CHECKER_DIR") or (ROOT / "tools" / "bin"))
-    have_trim = drat_trim.exists()
-    if args.format == "lrat" and not have_trim:
-        print(f"warning: {drat_trim} not built (bash tools/build_checkers.sh); "
-              "falling back to --format drat without a self-check", file=sys.stderr)
-        args.format = "drat"
-        name = args.out or ("proof.drat" + (".xz" if args.xz else ""))
+        return _fail("python-sat not installed (pip install -e '.[prove]')")
+
     selfcheck = have_trim and not args.no_selfcheck
     if not have_trim and not args.no_selfcheck:
         print(f"warning: {drat_trim} not built; skipping the DRAT self-check "
               "(the harness will still verify it)", file=sys.stderr)
     solvers = (["cadical153", "glucose4", "cadical195", "lingeling"]
                if args.solver == "auto" else [args.solver])
-    cnf_path = tmpdir / "formula.cnf"
-    lrat_path = tmpdir / "proof.lrat"
-    drat_path = None
-    verified_by = None
-    for solver in solvers:
-        print(f"solving with {solver} (proof logging on, worker process) ...", flush=True)
-        try:
-            sat, drat_path = solve_with_proof(cnf_path, solver, tmpdir)
-        except RuntimeError as e:
-            print(f"  {solver}: {e}", file=sys.stderr)
-            continue
-        if sat:
-            print(f"SAT: F(S,{m}) is satisfiable — a weak {m}-configuration exists, so no "
-                  f"UNSAT proof at this m. Try a deeper witness / larger m, or the shape may tile.")
-            for leftover in tmpdir.iterdir():
-                leftover.unlink()
-            tmpdir.rmdir()
-            return 2
-        if not (selfcheck or args.format == "lrat"):
-            verified_by = solver
-            break
-        # Self-check with the same checker the harness runs first: a solver's
-        # DRAT trace is not guaranteed to verify (python-sat 1.9.dev7 tracing
-        # has produced unverifiable DRATs from cadical195 and cadical153 on
-        # some formulas), and a rejected proof is a wasted submission.
-        cmd = [str(drat_trim), str(cnf_path), str(drat_path)]
-        if args.format == "lrat":
-            cmd += ["-L", str(lrat_path)]
-        proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
-                              stdin=subprocess.DEVNULL)
-        if any(ln.strip() == "s VERIFIED" for ln in proc.stdout.splitlines()):
-            print(f"  drat-trim self-check: s VERIFIED ({solver})", flush=True)
-            verified_by = solver
-            break
-        print(f"  {solver}: drat-trim did NOT verify this DRAT; trying the next solver",
-              file=sys.stderr)
-    if verified_by is None:
-        print("error: no solver produced a DRAT that drat-trim verifies "
-              "(tried " + ", ".join(solvers) + ")", file=sys.stderr)
-        return 1
-    payload_path = lrat_path if args.format == "lrat" else drat_path
-    core = None
-    if args.format == "lrat" and not args.no_core:
-        print("extracting the core clause list and renumbering the LRAT ...", flush=True)
-        try:
-            core_txt, core_lrat, n_core, n_formula = make_core_lrat(cnf_path, drat_path, drat_trim, tmpdir)
-        except RuntimeError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 1
-        print(f"  core: {n_core} of {n_formula} clauses ({100.0 * n_core / n_formula:.1f} %)", flush=True)
-        lrat_check = checker_path("lrat-check", os.environ.get("HEESCH_CHECKER_DIR") or (ROOT / "tools" / "bin"))
-        if lrat_check.exists():
-            core_cnf = tmpdir / "core.cnf"
-            with open(core_cnf, "w", encoding="ascii", newline="\n") as out, \
-                    open(core_txt, "r", encoding="ascii") as src:
-                out.write(f"p cnf {enc.num_vars} {n_core}\n")
-                for line in src:
-                    out.write(line)
-            proc = subprocess.run([str(lrat_check), str(core_cnf), str(core_lrat)],
-                                  capture_output=True, text=True, errors="replace",
-                                  stdin=subprocess.DEVNULL)
-            if not any(ln.strip() == "c VERIFIED" for ln in proc.stdout.splitlines()):
-                print("error: lrat-check did not verify the core-relative LRAT:\n" + proc.stdout[-800:],
-                      file=sys.stderr)
-                return 1
-            print("  lrat-check self-check on the core: c VERIFIED", flush=True)
-        payload_path = core_lrat
-        core_name = "core.txt" + (".xz" if args.xz else "")
-        core_sha = sha256_file(core_txt)
-        core_final = dest_dir / core_name
-        if args.xz:
-            with open(core_txt, "rb") as src, lzma.open(core_final, "wb", preset=6) as dst:
-                for chunk in iter(lambda: src.read(1 << 20), b""):
-                    dst.write(chunk)
-        else:
-            os.replace(core_txt, core_final)
-        core = (core_name, "xz" if args.xz else "none", core_sha, n_core)
-    payload_sha = sha256_file(payload_path)
-    final = dest_dir / name
-    if args.xz:
-        with open(payload_path, "rb") as src, lzma.open(final, "wb", preset=6) as dst:
-            for chunk in iter(lambda: src.read(1 << 20), b""):
-                dst.write(chunk)
-    else:
-        os.replace(payload_path, final)
-    for leftover in tmpdir.iterdir():
-        leftover.unlink()
-    tmpdir.rmdir()
 
-    block = proof_block(m, enc.digest, enc.num_vars, enc.num_clauses, name, args.format,
-                        "xz" if args.xz else "none", payload_sha, core=core)
-    new_text = body + block
-    from heesch_verify.parse import parse_submission
-    parse_submission(new_text)  # self-check: the block we wrote is grammatical
-    shape_path.write_text(new_text, encoding="ascii", newline="\n")
+    # Every intermediate lives in a private temp dir on the SAME filesystem as
+    # the outputs (so the final os.replace is atomic) and is removed on every
+    # exit path — SAT, solver failure, exception, Ctrl-C.
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix=".prove-", dir=dest_dir) as td:
+        tmpdir = pathlib.Path(td)
+        tile = frozenset(canonical_form(sub.cells, sub.grid, True))
+        print(f"encoding F(S,{m}) for {n} cells (streamed to disk) ...", flush=True)
+        cnf_path = tmpdir / "formula.cnf"
+        enc = encode_multilevel_stream(tile, sub.grid, outcome.contact, m, cnf_path)
+        print(f"  {enc.num_vars} vars, {enc.num_clauses} clauses, {enc.cnf_bytes/1e6:.0f} MB, "
+              f"digest {enc.digest[:16]}…", flush=True)
+        lrat_path = tmpdir / "proof.lrat"
+        drat_path = None
+        verified_by = None
+        for solver in solvers:
+            print(f"solving with {solver} (proof logging on, worker process) ...", flush=True)
+            try:
+                sat, drat_path = solve_with_proof(cnf_path, solver, tmpdir)
+            except RuntimeError as e:
+                print(f"  {solver}: {e}", file=sys.stderr)
+                continue
+            if sat:
+                print(f"SAT: F(S,{m}) is satisfiable — a weak {m}-configuration exists, so no "
+                      f"UNSAT proof at this m. Try a deeper witness / larger m, or the shape may tile.")
+                return 2
+            if not (selfcheck or fmt == "lrat"):
+                verified_by = solver
+                break
+            # Self-check with the same checker the harness runs first: a solver's
+            # DRAT trace is not guaranteed to verify (python-sat 1.9.dev7 tracing
+            # has produced unverifiable DRATs from cadical195 and cadical153 on
+            # some formulas), and a rejected proof is a wasted submission.
+            cmd = [str(drat_trim), str(cnf_path), str(drat_path)]
+            if fmt == "lrat":
+                cmd += ["-L", str(lrat_path)]
+            proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
+                                  stdin=subprocess.DEVNULL)
+            if any(ln.strip() == "s VERIFIED" for ln in proc.stdout.splitlines()):
+                print(f"  drat-trim self-check: s VERIFIED ({solver})", flush=True)
+                verified_by = solver
+                break
+            print(f"  {solver}: drat-trim did NOT verify this DRAT; trying the next solver",
+                  file=sys.stderr)
+        if verified_by is None:
+            return _fail("no solver produced a DRAT that drat-trim verifies "
+                         "(tried " + ", ".join(solvers) + ")")
+        payload_path = lrat_path if fmt == "lrat" else drat_path
+        core = None
+        core_staged = None
+        if want_core:
+            print("extracting the core clause list and renumbering the LRAT ...", flush=True)
+            try:
+                core_txt, core_lrat, n_core, n_formula = make_core_lrat(cnf_path, drat_path, drat_trim, tmpdir)
+            except RuntimeError as e:
+                return _fail(str(e))
+            print(f"  core: {n_core} of {n_formula} clauses ({100.0 * n_core / n_formula:.1f} %)", flush=True)
+            lrat_check = checker_path("lrat-check", checker_dir)
+            if lrat_check.exists():
+                core_cnf = tmpdir / "core.cnf"
+                with open(core_cnf, "w", encoding="ascii", newline="\n") as out, \
+                        open(core_txt, "r", encoding="ascii") as src:
+                    out.write(f"p cnf {enc.num_vars} {n_core}\n")
+                    for line in src:
+                        out.write(line)
+                proc = subprocess.run([str(lrat_check), str(core_cnf), str(core_lrat)],
+                                      capture_output=True, text=True, errors="replace",
+                                      stdin=subprocess.DEVNULL)
+                if not any(ln.strip() == "c VERIFIED" for ln in proc.stdout.splitlines()):
+                    return _fail("lrat-check did not verify the core-relative LRAT:\n" + proc.stdout[-800:])
+                print("  lrat-check self-check on the core: c VERIFIED", flush=True)
+            payload_path = core_lrat
+            core_sha = sha256_file(core_txt)
+            core_staged = tmpdir / ("staged-" + core_name)
+            if args.xz:
+                _xz_into(core_txt, core_staged)
+            else:
+                os.replace(core_txt, core_staged)
+            core = (core_name, comp, core_sha, n_core)
+        payload_sha = sha256_file(payload_path)
+        staged = tmpdir / ("staged-" + name)
+        if args.xz:
+            _xz_into(payload_path, staged)
+        else:
+            os.replace(payload_path, staged)
+
+        # Self-check the block we are about to write BEFORE anything lands in
+        # the submission directory; then install proof, core, shape — in that
+        # order, each by atomic rename, so a crash never leaves a #PROOF block
+        # that names a missing file.
+        block = proof_block(m, enc.digest, enc.num_vars, enc.num_clauses, name, fmt, comp,
+                            payload_sha, core=core)
+        new_text = body + block
+        parse_submission(new_text)
+        shape_staged = tmpdir / "staged-best.heesch"
+        shape_staged.write_text(new_text, encoding="ascii", newline="\n")
+        final = dest_dir / name
+        os.replace(staged, final)
+        if core_staged is not None:
+            os.replace(core_staged, dest_dir / core_name)
+        os.replace(shape_staged, shape_path)
+
     print(f"wrote {final} ({final.stat().st_size} bytes)"
           + (f" + {dest_dir / core[0]} ({(dest_dir / core[0]).stat().st_size} bytes)" if core else "")
           + f" and the #PROOF block in {shape_path.name}")
@@ -424,7 +474,6 @@ def main(argv=None) -> int:
         from heesch_verify.proofgate import ProofCarryingGate
 
         outcome2 = verify_witness(new_text, VerifyConfig())
-        checker_dir = pathlib.Path(os.environ.get("HEESCH_CHECKER_DIR") or (ROOT / "tools" / "bin"))
         verdict = ProofCarryingGate(shape_path.parent, checker_dir).check(outcome2.submission, outcome2)
         print("gate:", verdict.to_json())
         return 0 if verdict.code is None else 1

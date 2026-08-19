@@ -52,6 +52,44 @@ _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 _PROOF_BASENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
+def validate_proof_basename(name: str, fmt: str, comp: str, *,
+                            forbid: tuple[str, ...] = ("best.heesch",)) -> None:
+    """The `file` line's naming rule, shared by the parser and tools/prove.py
+    (which must refuse an illegal `--out` BEFORE it does any work — audit
+    2026-08-19 High 2). A proof file is a plain basename next to best.heesch:
+    no path separators, no leading `.`/`-` (argv-injection / hidden files),
+    <= 64 chars, never `best.heesch`, and the suffix must spell the declared
+    format and compression. Raises VerifyError(PARSE_SYNTAX)."""
+    if not _PROOF_BASENAME_RE.match(name) or name in forbid:
+        raise VerifyError(
+            ErrorCode.PARSE_SYNTAX, f"proof block: illegal proof file name {name[:80]!r}"
+        )
+    if fmt not in ("drat", "lrat"):
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"proof block: format must be drat|lrat, got {fmt[:20]!r}")
+    if comp not in ("none", "xz"):
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"proof block: compression must be none|xz, got {comp[:20]!r}")
+    expected_suffix = "." + fmt + (".xz" if comp == "xz" else "")
+    if not name.endswith(expected_suffix):
+        raise VerifyError(
+            ErrorCode.PARSE_SYNTAX,
+            f"proof block: file name must end in {expected_suffix!r} for format {fmt}/{comp}",
+        )
+
+
+def validate_core_basename(core_file: str, core_comp: str, *, proof_name: str) -> None:
+    """The optional `core` line's naming rule (same basename discipline; may
+    not collide with best.heesch or the proof file; `.xz` iff compressed)."""
+    if not _PROOF_BASENAME_RE.match(core_file) or core_file in ("best.heesch", proof_name):
+        raise VerifyError(ErrorCode.PARSE_SYNTAX,
+                          f"proof block: illegal core file name {core_file[:80]!r}")
+    if core_comp not in ("none", "xz"):
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: core compression must be none|xz")
+    if core_comp == "xz" and not core_file.endswith(".xz"):
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: xz core file must end in .xz")
+    if core_comp == "none" and core_file.endswith(".xz"):
+        raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: uncompressed core file must not end in .xz")
+
+
 @dataclass(frozen=True)
 class DefectBlock:
     level: int
@@ -269,20 +307,7 @@ def _parse_proof_block(header: str, lines: _Lines) -> ProofBlock:
         raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: num_vars/num_clauses must be >= 1")
     fl = _proof_line(lines, "file", 5)
     name, fmt, comp, payload = fl[1], fl[2], fl[3], fl[4]
-    if not _PROOF_BASENAME_RE.match(name) or name == "best.heesch":
-        raise VerifyError(
-            ErrorCode.PARSE_SYNTAX, f"proof block: illegal proof file name {name[:80]!r}"
-        )
-    if fmt not in ("drat", "lrat"):
-        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"proof block: format must be drat|lrat, got {fmt[:20]!r}")
-    if comp not in ("none", "xz"):
-        raise VerifyError(ErrorCode.PARSE_SYNTAX, f"proof block: compression must be none|xz, got {comp[:20]!r}")
-    expected_suffix = "." + fmt + (".xz" if comp == "xz" else "")
-    if not name.endswith(expected_suffix):
-        raise VerifyError(
-            ErrorCode.PARSE_SYNTAX,
-            f"proof block: file name must end in {expected_suffix!r} for format {fmt}/{comp}",
-        )
+    validate_proof_basename(name, fmt, comp)
     if not _HEX64_RE.match(payload):
         raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: payload digest must be 64 lowercase hex")
     core_file = None
@@ -299,15 +324,7 @@ def _parse_proof_block(header: str, lines: _Lines) -> ProofBlock:
         if fmt != "lrat":
             raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: a core list requires format lrat")
         core_file, core_comp, core_sha = ct[1], ct[2], ct[3]
-        if not _PROOF_BASENAME_RE.match(core_file) or core_file in ("best.heesch", name):
-            raise VerifyError(ErrorCode.PARSE_SYNTAX,
-                              f"proof block: illegal core file name {core_file[:80]!r}")
-        if core_comp not in ("none", "xz"):
-            raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: core compression must be none|xz")
-        if core_comp == "xz" and not core_file.endswith(".xz"):
-            raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: xz core file must end in .xz")
-        if core_comp == "none" and core_file.endswith(".xz"):
-            raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: uncompressed core file must not end in .xz")
+        validate_core_basename(core_file, core_comp, proof_name=name)
         if not _HEX64_RE.match(core_sha):
             raise VerifyError(ErrorCode.PARSE_SYNTAX, "proof block: core digest must be 64 lowercase hex")
         core_n = _int(ct[4], "proof core clause count")
