@@ -198,25 +198,28 @@ on the standard 8 GB GitHub runner it reports `CakeML heap space exhausted`
 after ~5 min and the harness answers `RESOURCE_EXCEEDED` (naming the checker,
 never `NOT_VERIFIED`); on a ≥ 12 GB machine it is checked in-band. Larger
 shapes at m = 6 (a 20-cell shape would be ~5× that) are the next widening
-question, and beyond what the runner can check the out-of-band record
-procedure applies (architecture §13.9).
+question (it is inside the `record` profile, §10.2a); beyond the record
+band the maintainer re-check of architecture §13.9 applies.
 
-### 10.2a The `Hc = 5, Hh = 6` case and the out-of-band band selection
+### 10.2a The `Hc = 5, Hh = 6` case and the resource profiles
 
 The record flag does not require exactness (architecture §2.3): a verified
 `hc >= 5` plus ANY checked `F(S, m)` UNSAT is record-breaking. But the level
 rule `m >= hh_verified + 1` means a candidate whose witness shows a real
-hole-permitted 6-corona can only be certified by `F(S, 7)`, which is inside
-the encoder band since 2026-08-19 but outside the in-harness band
-(`docs/ml-feasibility.md`, "F(S,7)"). The code
-therefore exposes the band as a parameter instead of a constant:
-`ProofCarryingGate(..., band=...)`, `check_proof_v2(..., enforce_band=False)`,
-`python -m heesch_verify --check-proof --band {harness,encoder,none}` and
-`tools/prove.py --band {harness,encoder,none}`. The harness never selects
-anything but `harness` (no environment variable, no configuration file);
-`encoder` and `none` exist for the maintainer's out-of-band re-check
-(architecture §13.9) on a machine without the job's caps. Widening a band
-after a measurement changes no CNF byte and is not a revision bump.
+hole-permitted 6-corona can only be certified by `F(S, 7)` — 36–120 M
+clauses for 11–20-cell shapes (`docs/ml-feasibility.md`). The benchmark
+therefore runs on a dedicated runner under the `record` resource profile
+(`heesch_verify/profile.py`, architecture §13.5; `docs/RUNNER.md`), whose
+in-harness band `(12, 8) (20, 7) (50, 4) (100, 3) (200, 2)` admits that
+certificate — and `F(S, 8)` for the `Hc = 6, Hh = 7` case up to 12 cells —
+**inside the job**. The profile is selected from the machine (MemAvailable,
+scratch), never from an environment variable or participant input; the
+workflow preflight fails a smaller machine loudly. The band is still a
+parameter for the maintainer CLI (`python -m heesch_verify --check-proof
+--profile {auto,standard,record} --band {profile,harness,record,encoder,none}`,
+`tools/prove.py --profile … --band …`) for re-checks beyond the record band
+(architecture §13.9). Widening a band after a measurement changes no CNF
+byte and is not a revision bump.
 
 ## 11. Frozen constants (revision 2)
 

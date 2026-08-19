@@ -354,8 +354,9 @@ that list — so the checkers load only the clauses the proof uses (measured
    regular, executable files in the checker directory (the same predicate
    the spawn applies; a spawn-time `OSError` is also `CHECKER_UNAVAILABLE`),
    else `CHECKER_UNAVAILABLE`.
-3. Bands: in-harness band `HARNESS_PROOF_BAND = ((12,6),(20,5),(50,3),(100,2))`
-   (cells, max m) and the encoder feasibility band
+3. Bands: the selected resource profile's in-harness band (§13.5:
+   `standard` `((12,6),(20,5),(50,3),(100,2))`, `record`
+   `((12,8),(20,7),(50,4),(100,3),(200,2))`; cells, max m) and the encoder feasibility band
    (`multilevel.api.FEASIBILITY_BAND`, measured policy), else `RESOURCE_EXCEEDED`
    before any encoding; the in-process encoding step is additionally
    wall-clock guarded (`ENCODE_TIMEOUT_S = 600` s, applied to the encoder
@@ -404,23 +405,48 @@ line-anchored (`s VERIFIED` / `c VERIFIED` / `s VERIFIED…`); any
 is `CHECKER_UNAVAILABLE`, never a downgrade. Triage tier (one checker) exists
 for library/tests only.
 
-### 13.5 Budgets
-`checkers.CheckBudget`: per-checker caps drat-trim 600 s, cake_lpr 900 s,
-lrat-check 300 s, overall deadline 1500 s; each spawn gets
-`min(cap, deadline - now)`; a non-positive remainder is `RESOURCE_EXCEEDED`
-without spawning. The harness constructs the budget before the gate runs,
-so the 1500 s deadline spans the whole proof stage (proof materialisation,
-encoding, checkers): the encoder may use at most the first
-`min(600, remaining)` s of it (§13.3 step 3), the checkers share what is
-left, each under its own cap. Worst case the proof stage is 25 min, leaving
-~5 min of the 30-minute benchmark job for witness verification and
-start-up. The encode guard is two-layered: `SIGALRM` where available
-(POSIX main thread) plus a portable monotonic deadline the encoder itself
-checks between universe levels and every 4096 clauses
-(`encode_multilevel_stream(deadline=)`), so Windows and worker-thread
-callers get the same `RESOURCE_EXCEEDED`; and `CheckBudget.deadline`
-remains the outer backstop (an over-long encode leaves no time for a
-checker to spawn).
+### 13.5 Budgets — resource profiles
+Every budget of the proof path comes from ONE place, `heesch_verify/profile.py`,
+selected by the machine the harness runs on (`profile.detect()`: `record`
+iff MemAvailable ≥ 56 GiB and the scratch disk has ≥ 150 GiB free, else
+`standard`). The selected profile is written into `score.json`
+(`resource_profile`). The profile is never read from an environment
+variable or a participant input — the machine is the policy, and the
+benchmark workflow's preflight (`tools/runner_preflight.py --require
+record`, `docs/RUNNER.md`) fails the job on a machine below the record
+minima rather than letting it silently score under the narrow profile.
+
+| budget | `standard` (8 GB / 30-min CI runner) | `record` (dedicated runner, `docs/RUNNER.md`) |
+|---|---|---|
+| in-harness band (cells, max m) | (12,6) (20,5) (50,3) (100,2) | (12,8) (20,7) (50,4) (100,3) (200,2) |
+| encode guard (encoder call only) | 600 s | 3600 s |
+| checker caps drat-trim / cake_lpr / lrat-check | 600 / 900 / 300 s | 3600 / 3600 / 1800 s |
+| proof-stage deadline (`CheckBudget`, from the stage's start) | 1500 s | 9000 s |
+| proof / core file as submitted | 48 MiB | 200 MiB (× 2 + shape ≤ `maxSubmissionBytes` 512 MiB) |
+| decompressed payload (scratch disk) | 1 GiB | 8 GiB |
+| core list | 4 M clauses / 512 MiB | 32 M clauses / 4 GiB |
+| `cake_lpr` heap cap (85 % of MemAvailable, clamped) | 12 GB | 48 GB |
+| scratch required before encoding | 8 GiB | 64 GiB |
+| job timeout (workflow) | 30 min | 240 min |
+
+`checkers.CheckBudget`: each spawn gets `min(cap, deadline - now)`; a
+non-positive remainder is `RESOURCE_EXCEEDED` without spawning. The harness
+constructs the budget when the proof stage starts, so the deadline spans
+proof materialisation, encoding and checkers; the encoder may use at most
+`min(encode guard, remaining)` of it, the checkers share what is left. The
+encode guard is two-layered: `SIGALRM` where available plus a portable
+monotonic deadline the encoder checks between universe levels and every
+4096 clauses (`encode_multilevel_stream(deadline=)`). Worst case under
+`record`: 1 h encode + 2.5 h checkers ≈ 3.5 h < 240 min; measured record
+instances finish in 5–20 min (`docs/ml-feasibility.md`).
+
+The record band is set from measurements, not hope: `F(S,7)` at 11–16 cells
+is 36–77 M clauses / 4–8.5 GB DIMACS / 3–7 laptop-minutes / ≤ 8 GB RSS;
+`F(S,8)` at ≤ 12 cells ~75 M; a 20-cell `F(S,7)` ~120 M / 13 GB / ~10 min /
+~12 GB — all far inside the `record` envelope. `(20, 8)` (~250 M clauses,
+27 GB) enters the band once `measure.yml` has timed it on the runner.
+Widening a profile is measured policy (§13.9 step 3), not an encoder
+revision.
 
 ### 13.6 Round-trip oracle
 `patch.check_corona(..., hole_mode="none")` is the hole-agnostic geometric
@@ -441,62 +467,53 @@ The checkers run inside the same bubblewrap/`sandbox-exec` confinement as the
 parser: read-only repo bind, writable scratch only (`TMPDIR`), no network, no
 capabilities. They read two path arguments and stdin is `/dev/null`.
 
-### 13.9 Record procedure (in-band and out-of-band)
+### 13.9 Record procedure
 
 A `record_eligible` entry (proof-backed, `hc_verified >= 5`; `record_exact`
-when the value is also pinned) is a machine-checked research claim. Two
-ways it can arise:
+when the value is also pinned) is a machine-checked research claim, and it
+is **scored in-harness**: the benchmark job runs on the dedicated record
+runner (`docs/RUNNER.md`), whose `record` profile (§13.5) admits the
+certificate every record candidate needs — `F(S,7)` (the `Hc = 5, Hh = 6`
+case; `Hc ∈ {Hh−1, Hh}`) for shapes up to 20 cells, and `F(S,8)` (the
+`Hc = 6, Hh = 7` case) up to 12 cells. Participants produce the proof with
+`tools/prove.py submission/best.heesch --m <hh+1>` (an external CaDiCaL via
+`tools/build_solver.sh`; the core-LRAT payload is tens of MB xz) and submit
+it like any other; the harness regenerates `F(S,m)`, checks the proof with
+`cake_lpr` + `lrat-check`, and the score carries `resource_profile=record`,
+`proof_m`, `record_eligible`. `.github/workflows/record-e2e.yml` proves
+this path end to end (an `F(S,7)` proof produced by the participant tooling
+and scored by `./benchmark.sh`) on every run; it is the regression guard for
+"a legitimate `Hc = 5, Hh = 6` candidate passes the proof limits".
 
-**In-band.** The submission carries the `F(S, m)` proof, `m >= hh + 1`, and
-the harness verifies it inside the benchmark job (bands in §13.3: an
-`Hc = 5` certificate for shapes up to 12 cells is `F(S, 6)` when `Hh = 5` —
-producible and inside the band, checked in-band when the proof carries a
-core list (§13.3 5b); without one `cake_lpr` needs ≥ 12 GB for the full CNF
-and the 8 GB runner answers `RESOURCE_EXCEEDED` — but `F(S, 7)` when
-`Hh = 6`, which is inside the encoder band and outside the in-harness band
-as of 2026-08-19; `docs/ml-feasibility.md`). The score is
-recorded like any other; the `record_eligible` / `record_exact` flags are
-set from the metrics.
+**Beyond the record band** (e.g. > 20 cells at `m ≥ 5`, or `m = 8` at
+13–20 cells until measured) the harness still answers `RESOURCE_EXCEEDED`
+for the proof (fail closed, never a wrong verdict). The maintainers then run
+the identical code path with only the band relaxed —
+`python -m heesch_verify submission/best.heesch --check-proof --profile
+record --band encoder|none` on the runner or a larger machine — file the
+verdict JSON, CNF digest, proof sha256 and checker verdicts in
+`docs/records/`, and widen the band by measurement (`measure.yml`) so the
+next such submission scores in-harness. This is a scheduling step, not a
+weaker check.
 
-**Out-of-band.** A witness whose shape or depth is outside the in-harness
-band cannot score by itself (fail closed: `RESOURCE_EXCEEDED` for the proof,
-or `GATE_INCONCLUSIVE` without one). The participant should still submit it,
-with `hc_verified` as deep as they can prove, and file the proof (or the
-request to produce one) with the maintainers, who:
-
-1. regenerate `F(S, m)` with the frozen encoder revision named in the
-   `#PROOF` block, on a machine without the job's memory/time caps, with the
-   exact same code path and only the band relaxed:
-   `python -m heesch_verify submission/best.heesch --check-proof --band encoder`
-   (the encoder's measured feasibility band) or `--band none` (no band at
-   all); participants produce an `F(S, 7)` proof for an `Hc = 5, Hh = 6`
-   candidate with `tools/prove.py … --m 7 --band encoder`. The
-   harness itself has no band switch — the strict band is structural;
-2. record the outcome — the verdict JSON (which names the band used), CNF
-   digest, proof sha256, checker verdicts and versions — in `docs/records/`
-   next to the shape and witness, and, if VERIFIED, promote the entry with
-   `non_tiler_evidence=proof` by hand (the score itself is the ordinary
-   `hc_verified + defect` scalar; the in-harness run of that submission stays
-   `RESOURCE_EXCEEDED` until step 3);
-3. widen the in-band limits for everyone once the measurement shows the new
-   size/depth fits the job (a policy change, not a new encoder revision).
-
-Before **announcing** any record, in-band or out, the maintainers (i)
-re-run the proof check out of band, (ii) confirm the encoder revision's
-soundness obligations (multilevel spec M1–M9, `soundness-note.md`) have been
-externally reviewed for that revision, and (iii) publish the shape, witness,
-proof and digests. None of this alters the score.
+Before **announcing** any record the maintainers (i) re-run the proof check
+independently, (ii) confirm the encoder revision's soundness obligations
+(multilevel spec M1–M9, `soundness-note.md`) have been externally reviewed
+for that revision — until then the claim is worded "accepted by the
+revision-2 verifier and its checked UNSAT proof, conditional on the stated
+encoder soundness obligations" — and (iii) publish the shape, witness, proof
+and digests. None of this alters the score.
 
 ## 14. Resource bounds
 
 Shape ≤ 200 cells, `span_x + span_y <= 29`; ≤ 20 000 placements per patch;
 ≤ 64 corona levels; corona work budget 8 000 000 cell·levels; shape file
-≤ 2 MiB, proof file ≤ 48 MiB stored / 1 GiB decompressed
-(`PROOF_MAX_PAYLOAD_BYTES`, on scratch disk); boundary-word
-caps 410 (square) / 810 (hex, iamond) edges — above the longest legal
-boundary; checker budgets §13.5; benchmark job 30 min. Bounds are not frozen
-conventions: raising one is not a new revision, but every accepted result stays
-valid.
+≤ 2 MiB; proof file, payload, core and checker budgets per resource profile
+(§13.5: `standard` 48 MiB / 1 GiB, `record` 200 MiB / 8 GiB, on scratch
+disk); boundary-word caps 410 (square) / 810 (hex, iamond) edges — above the
+longest legal boundary; benchmark job 240 min on the record runner
+(`docs/RUNNER.md`). Bounds are not frozen conventions: raising one is not a
+new revision, but every accepted result stays valid.
 
 ## 15. Open questions
 

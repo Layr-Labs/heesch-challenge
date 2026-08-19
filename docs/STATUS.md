@@ -40,15 +40,27 @@ subset (exact membership in F) → checkers at record tier: two independent
 VERIFIED verdicts, one of them `cake_lpr` (DRAT: `drat-trim` → `cake_lpr`;
 LRAT: `cake_lpr` → `lrat-check`). `CheckBudget`: drat-trim 600 s /
 cake_lpr 900 s / lrat-check 300 s, 1500 s overall for the whole proof stage
-(built before the gate runs). In-harness band `((12,6),(20,5),(50,3),(100,2))`;
-encoder feasibility band `((12,7),(20,5),(50,4),(100,3),(200,2))` (`(12,7)`
-added 2026-08-19 after the `F(S,7)` measurement).
+(built before the gate runs) — those are the `standard` profile's values;
+the `record` profile's are in the next paragraph. Encoder feasibility band
+`((12,8),(20,7),(50,4),(100,3),(200,2))`.
 
-**Out-of-band record re-check (architecture §13.9).** Same code path with the
-band relaxed: `python -m heesch_verify best.heesch --check-proof --band
-{harness,encoder,none}`; `tools/prove.py … --band {harness,encoder,none}` to
-produce such a proof (e.g. `F(S,7)` for an `Hc = 5, Hh = 6` candidate). The
-harness has no band switch.
+**Record path — in-harness (Plan 3, 2026-08-19).** The benchmark job runs on
+a dedicated self-hosted runner (`docs/RUNNER.md`: ≥ 8 vCPU, 64 GB, 200 GB
+NVMe, 240-min job, label `heesch-record`, fail-loud preflight). Every
+proof-path budget comes from `heesch_verify/profile.py`, selected by the
+machine (`record` iff MemAvailable ≥ 56 GiB and scratch ≥ 150 GiB, else
+`standard`; `resource_profile` in `score.json`). The `record` band
+`(12,8) (20,7) (50,4) (100,3) (200,2)` admits `F(S,7)` — the `Hc = 5, Hh = 6`
+certificate — for every record-candidate size and `F(S,8)` to 12 cells;
+encode guard 3600 s, checker deadline 9000 s, payload 8 GiB, stored 200 MiB
+(`maxSubmissionBytes` 512 MiB), core 32 M clauses. Participants produce the
+proof with `tools/prove.py` + an external CaDiCaL (`tools/build_solver.sh`,
+DRAT streams to disk). `record-e2e.yml` scores an `F(S,7)` proof in-harness
+on every run; `measure.yml` times the cycle on the runner. Beyond the record
+band (> 20 cells at `m ≥ 5`, `(20, 8)` until measured) the harness still
+answers `RESOURCE_EXCEEDED` and the maintainers run the identical code path
+with `--profile record --band encoder|none`, then widen the band by
+measurement (architecture §13.9).
 
 **Record flags (`score.json` metrics).** `record_eligible` = proof-backed
 non-tiler with `hc_verified ≥ 5` (record-breaking whatever the exact value,
@@ -76,7 +88,7 @@ Status values: FIXED `<commit>` · OPEN · PLAN 2 · ACCEPTED (with reason).
 
 | # | Finding | Severity | Status | Where | Test |
 |---|---|---|---|---|---|
-| H1 | Automatic record path excludes the legitimate `Hc = 5, Hh = 6` case; `record_eligible` required exactness | High | FIXED `fd254c4` (classification: `record_eligible` = proof-backed, `hc ≥ 5`; `record_exact` added), `05b055a` (band plumbing: `--band`, `band=`, `enforce_band`) and the F(S,7) commit (`F(S,7)` measured: 187 s encode / 3.1 GB RSS / 36.5 M clauses, UNSAT 227 s, core LRAT 18 MB xz → `(12, 7)` added to the **encoder** band; in-harness band unchanged pending a runner timing — out-of-band path documented) | `harness/verify.py::_record_eligible`, `heesch_verify/result.py`, `heesch_verify/proofgate.py` (`in_band`, `named_band`, `ProofCarryingGate(band=)`), `heesch_encoder/proofcheck/pipeline.py` (`enforce_band`), `heesch_verify/cli.py --band`, `tools/prove.py --band`, docs §2.3/§13.9, multilevel spec §10.2a | `tests/test_record_flag.py`; `tests/test_proof_gate.py::test_gate_band_*`, `::test_named_bands`, `::test_check_proof_v2_enforce_band_false_reaches_the_encoder`, `::test_cli_check_proof_matches_harness` |
+| H1 | Automatic record path excludes the legitimate `Hc = 5, Hh = 6` case; `record_eligible` required exactness | High | FIXED `fd254c4` (classification), `05b055a` (band plumbing), `81082cc` (`F(S,7)` measured), **Plan 3 (`2bee047`…): in-harness** — resource profiles + dedicated record runner; the `record` band admits `F(S,7)` to 20 cells / `F(S,8)` to 12; `record-e2e.yml` is the regression guard. Remaining: runner registration + `measure.yml` timings (§4) | `harness/verify.py::_record_eligible`, `heesch_verify/result.py`, `heesch_verify/proofgate.py` (`in_band`, `named_band`, `ProofCarryingGate(band=)`), `heesch_encoder/proofcheck/pipeline.py` (`enforce_band`), `heesch_verify/cli.py --band`, `tools/prove.py --band`, docs §2.3/§13.9, multilevel spec §10.2a | `tests/test_record_flag.py`; `tests/test_proof_gate.py::test_gate_band_*`, `::test_named_bands`, `::test_check_proof_v2_enforce_band_false_reaches_the_encoder`, `::test_cli_check_proof_matches_harness` |
 | H2 | `tools/prove.py --out` escapes the submission dir / overwrites `best.heesch`; shared `.prove-tmp`; no cleanup on failure | High | FIXED `0c4b08d` | `tools/prove.py` (validate before work, `TemporaryDirectory(dir=dest)`, atomic install after `parse_submission`), `heesch_verify/parse.py::validate_proof_basename/validate_core_basename` | `tests/test_prove_cli.py` |
 | M3 | Non-ASCII core data crashes the gate (UnicodeDecodeError) | Medium | FIXED `db45315` | `heesch_encoder/proofcheck/core.py::parse_core_file` (decode/IO → `CoreError GATE_PROOF_INVALID`), pipeline second net | `tests/test_core_proof.py::test_non_ascii_core_*`, `::test_unreadable_core_is_structured_rejection` |
 | M4 | Declared proof format not enforced; false provenance (`format: drat` for an LRAT) | Medium | FIXED `556134e` | `ProofSubmission.declared_format`, `ProofOutcome.detected_format`, `ProofVerdict.detected_format`, `Result.proof_format_detected` | `tests/test_proof_gate.py::test_declared_format_must_match_detected` |
@@ -102,12 +114,16 @@ and found no false-acceptance route.
 
 ## 4. Measurements pending / in progress
 
-- `F(S,7)` for the Kaplan `Hc = 4` 11-hex: **done 2026-08-19** (laptop; see
-  `docs/ml-feasibility.md` "F(S,7)"). Encoder band widened to `(12, 7)`.
-- Still pending: the same `F(S,7)` cycle timed on the benchmark runner
-  (2 vCPU, 8 GB; encode must fit the 600 s guard, scratch must hold the
-  4 GB DIMACS, `cake_lpr` on the core CNF) before `(12, 7)` can enter the
-  in-harness band (architecture §13.9 step 3).
+- `F(S,7)` for the Kaplan `Hc = 4` 11-hex: **done 2026-08-19** (laptop).
+  `F(S,5..7)` counts for the 13/15/16-hex `Hc = 4` shapes: **done 2026-08-19**
+  (`docs/ml-feasibility.md`). These set the `record` profile's band.
+- **Pending (needs the runner registered, `docs/RUNNER.md`):** dispatch
+  `measure.yml` for 11-hex m=7/8, 13-hex m=7, 16-hex m=7/8 and a 20-iamond
+  m=6/7/8 on `heesch-record`; paste the rows into `ml-feasibility.md`; add
+  `(20, 8)` to `RECORD.harness_band` (+ `FEASIBILITY_BAND`, addendum,
+  tests) iff it fits. Then dispatch `record-e2e.yml` (the acceptance test:
+  an `F(S,7)` proof scored in-harness with `resource_profile=record`) and
+  `benchmark.yml` on the baseline.
 
 ## 5. Plan 2 — done 2026-08-19
 
@@ -122,8 +138,12 @@ and found no false-acceptance route.
 7. Portable encode guard (monotonic deadline inside
    `encode_multilevel_stream`) — `4eb3532`.
 
-Remaining after Plan 2: the external review (TB) and the runner timing of
-`F(S,7)` (§4) — both are actions outside the repository.
+Plan 3 (2026-08-19, `2bee047`…): record path in-harness — resource profiles,
+dedicated runner workflow + preflight + `docs/RUNNER.md`, pipeline scale
+fixes, `prove.py --solver-bin` + `tools/build_solver.sh`,
+`tools/measure_record_cycle.py`, `measure.yml`, `record-e2e.yml`, docs.
+Remaining outside the repository: register the runner (`docs/RUNNER.md`),
+run `measure.yml` / `record-e2e.yml` (§4), the external M1–M9 review (TB).
 
 ## 6. How to verify
 

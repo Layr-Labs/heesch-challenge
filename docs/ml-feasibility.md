@@ -169,16 +169,47 @@ counts; same laptop, single core):
 | lrat-check on the core | `c VERIFIED` in 3 s |
 
 So an `F(S,7)` proof for a ≤ 12-cell shape is producible on a laptop in
-about 13 minutes (`tools/prove.py … --m 7 --band encoder`), its submitted
-payload (core LRAT + core list) is 21 MB xz / 445 MB raw — inside the 48 MiB
-stored / 1 GiB payload caps — and the core-relative check is seconds. On the
-strength of these numbers `(<= 12, 7)` was added to the **encoder**
-feasibility band (2026-08-19). The **in-harness** band stays at `(<= 12, 6)`
-until the same cycle is timed on the benchmark runner (the laptop encode is
-187 s against the 600 s encode guard; a 2-vCPU runner is roughly 2–3× slower
-and the job's scratch must hold the 4 GB DIMACS): until then an `Hc = 5,
-Hh = 6` candidate goes through the out-of-band record procedure
-(architecture §13.9, `--band encoder`). Participant-side note: the pysat
-worker holds the DRAT in memory before writing it (peak ~27 GB across the
-cycle for this instance); a solver binary with file-based proof logging
-avoids that.
+about 13 minutes, its submitted payload (core LRAT + core list) is 21 MB xz /
+445 MB raw, and the core-relative check is seconds. Participant-side note:
+the pysat worker holds the DRAT in memory before writing it (peak ~27 GB
+across the cycle for this instance); `tools/prove.py` therefore prefers an
+external CaDiCaL (`tools/build_solver.sh`) that streams the DRAT to disk —
+with it the same `F(S,5)` cycle peaks at 1.6 GB RSS
+(`tools/measure_record_cycle.py --shape hex11-kaplan-hc4hh4 --m 5`).
+
+### Record-candidate sizes: F(S,5..7) counts at 13–16 cells (2026-08-19)
+
+Kaplan's `Hc = 4` polyhexes (`tools/ml_feasibility.py --shape … --m …`,
+counts from universes; encode time ≈ 5 µs/clause, DIMACS ≈ 110 B/clause):
+
+| shape | cells | m | vars | clauses | est. DIMACS | est. encode | count RSS |
+|---|---|---|---|---|---|---|---|
+| hex13-kaplan-hc4hh4 | 13 | 5 | 861 686 | 9 638 020 | 1.1 GB | ~50 s | 2.4 GB |
+| hex13-kaplan-hc4hh4 | 13 | 6 | 1 466 761 | 24 280 246 | 2.7 GB | ~2 min | 3.6 GB |
+| hex13-kaplan-hc4hh4 | 13 | 7 | 2 298 762 | 51 615 860 | 5.7 GB | ~4.5 min | 4.3 GB |
+| hex15-kaplan-hc4hh4-a | 15 | 5 | 993 094 | 10 112 615 | 1.1 GB | ~50 s | 2.5 GB |
+| hex15-kaplan-hc4hh4-a | 15 | 6 | 1 688 673 | 25 184 519 | 2.8 GB | ~2 min | 3.7 GB |
+| hex15-kaplan-hc4hh4-a | 15 | 7 | 2 644 394 | 53 197 629 | 5.9 GB | ~4.5 min | 4.5 GB |
+| hex16-kaplan-hc4hh4 | 16 | 5 | 1 340 629 | 14 491 882 | 1.6 GB | ~75 s | 4.3 GB |
+| hex16-kaplan-hc4hh4 | 16 | 6 | 2 283 177 | 36 417 248 | 4.0 GB | ~3 min | 5.1 GB |
+| hex16-kaplan-hc4hh4 | 16 | 7 | 3 579 565 | 77 320 463 | 8.5 GB | ~6.5 min | 7.6 GB |
+
+Extrapolating (the 16-hex is the largest known `Hc = 4` polyhex but the
+20-iamond exists): a 20-cell `F(S,7)` ≈ 120 M clauses / 13 GB / ~10 min /
+~12 GB RSS; `F(S,8)` roughly doubles each.
+
+### Resource profiles (heesch_verify/profile.py) — what the benchmark admits
+
+These numbers are why the benchmark runs on a dedicated runner
+(`docs/RUNNER.md`, ≥ 8 vCPU / 64 GB / 200 GB NVMe / 240-min job) under the
+`record` profile: in-harness band `(12, 8) (20, 7) (50, 4) (100, 3) (200, 2)`,
+encode guard 3600 s, checker deadline 9000 s, payload 8 GiB, core 32 M
+clauses — every record certificate (`F(S,7)` to 20 cells, `F(S,8)` to 12)
+fits with a large margin. The 8 GB / 30-min CI runner keeps the `standard`
+profile (`(12, 6) (20, 5) (50, 3) (100, 2)`, 600 s, 1500 s, 1 GiB).
+
+**Runner measurements (pending).** `.github/workflows/measure.yml`
+(`tools/measure_record_cycle.py`) times the full cycle on the record runner;
+its rows go here. `(20, 8)` joins the record band once measured there.
+`.github/workflows/record-e2e.yml` scores an `F(S,7)` proof in-harness on
+every run.

@@ -152,21 +152,20 @@ Heesch number.
   sha256, and requires **two** independent VERIFIED verdicts, one from the
   formally-verified `cake_lpr` (DRAT: `drat-trim` → `cake_lpr`; LRAT:
   `cake_lpr` → `lrat-check`). `m` must be `≥ hh + 1`
-  (`PROOF_LEVEL_INCONSISTENT`); the size must be inside the in-harness band
-  (≤ 12 cells `m ≤ 6`, ≤ 20 `m ≤ 5`, ≤ 50 `m ≤ 3`, ≤ 100 `m ≤ 2`, else
-  `RESOURCE_EXCEEDED` — every known Hc = 4 shape's exactness proof `F(S,5)`
-  fits; an `Hc ≥ 5` certificate is `F(S,6)` when `Hh = 5` — producible for
-  shapes up to 12 cells (measured: ~2 min to encode, ~3 min to solve, 25 MB
-  xz LRAT) and checked in-band because the checkers only load the proof's
-  core clauses (see `docs/heesch-verifier-architecture.md` §13.3 5b; without
-  a core list the formally-verified checker needs > 6 GB and the standard
-  8 GB runner answers `RESOURCE_EXCEEDED`) — but `F(S,7)` when `Hh = 6`
-  (`Hc ∈ {Hh − 1, Hh}`), which is inside the encoder band (measured: ~3 min
-  to encode, ~4 min to solve, 21 MB xz core LRAT + core list) but outside the
-  in-harness band: submit the witness anyway, produce the proof with
-  `tools/prove.py … --m 7 --band encoder`, and file it for the out-of-band
-  record procedure (§13.9; `python -m heesch_verify --check-proof --band
-  encoder` is the maintainers' re-check);
+  (`PROOF_LEVEL_INCONSISTENT`); the size must be inside the benchmark's
+  in-harness band. The benchmark runs on a dedicated record runner
+  (`docs/RUNNER.md`; `resource_profile: record` in `score.json`) whose band
+  is ≤ 12 cells `m ≤ 8`, ≤ 20 `m ≤ 7`, ≤ 50 `m ≤ 4`, ≤ 100 `m ≤ 3`, ≤ 200
+  `m ≤ 2` (else `RESOURCE_EXCEEDED`): every known Hc = 4 shape's exactness
+  proof `F(S,5)` fits, and so does every record certificate — `F(S,6)` when
+  `Hh = 5`, **`F(S,7)` when `Hh = 6`** (`Hc ∈ {Hh − 1, Hh}`; measured for an
+  11-hex: 3 min to encode, 4 min to solve, 18 MB xz core LRAT; a 16-hex is
+  ~2× that), and `F(S,8)` (`Hc = 6, Hh = 7`) up to 12 cells. Produce the
+  proof with `tools/prove.py submission/best.heesch` (CaDiCaL via
+  `tools/build_solver.sh`; it defaults to the LRAT + core list the checkers
+  need) and submit it; the harness regenerates `F(S,m)` and checks it inside
+  the job (`docs/heesch-verifier-architecture.md` §13.5/§13.9;
+  `.github/workflows/record-e2e.yml` exercises exactly this path);
   a proof block that is present but broken rejects even a census shape.
   `m = hh + 1` makes the value exact; larger `m` certifies non-tilerhood
   with the lower bound only.

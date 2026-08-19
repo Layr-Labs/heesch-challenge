@@ -97,23 +97,33 @@ separately by SHA-pinned actions, hash-pinned vendored sources, and
   work budget.
 - **A-2 boundary criteria**: O(n³) on ≤ 410/810-edge words — seconds at
   most on long-boundary shapes.
-- **A-3 encoding**: `F(S, m)` inside the in-harness band only (≤ 12 cells
-  m ≤ 6, ≤ 20 m ≤ 5, ≤ 50 m ≤ 3, ≤ 100 m ≤ 2), measured (up to ~3 min /
-  2 GB DIMACS at 2.5 GB RSS with the streamed encoder) and additionally
-  wall-clock guarded (the encoder call only: 600 s, clipped to the checker
-  budget's remaining time → `RESOURCE_EXCEEDED`); larger is rejected
-  before work. Proof payloads up to 1 GiB decompressed land on scratch disk,
-  never in memory. Order: the payload is streamed/decompressed/hashed to
+- **A-3 encoding**: `F(S, m)` inside the selected resource profile's
+  in-harness band only (`heesch_verify/profile.py`, architecture §13.5:
+  `record` ≤ 12 cells m ≤ 8, ≤ 20 m ≤ 7, ≤ 50 m ≤ 4, ≤ 100 m ≤ 3, ≤ 200
+  m ≤ 2 on the dedicated runner; `standard` ≤ 12 m ≤ 6, ≤ 20 m ≤ 5, ≤ 50
+  m ≤ 3, ≤ 100 m ≤ 2 on an 8 GB job), measured (`record`: up to ~120 M
+  clauses / 13 GB DIMACS / ~12 GB RSS / ~10 min with the streamed encoder)
+  and additionally wall-clock guarded (the encoder call only: 3600 s record /
+  600 s standard, clipped to the checker budget's remaining time →
+  `RESOURCE_EXCEEDED`); a scratch-disk check precedes encoding and ENOSPC is
+  `RESOURCE_EXCEEDED`; larger is rejected before work. The profile is derived
+  from the machine (MemAvailable, scratch free), never from an environment
+  variable or participant input, and the workflow preflight fails the job on
+  a machine below the record minima (docs/RUNNER.md). Proof payloads (up to
+  8 GiB decompressed under `record`, 1 GiB under `standard`) land on scratch
+  disk, never in memory. Order: the payload is streamed/decompressed/hashed to
   scratch under these caps BEFORE the CNF is regenerated — it is never
   parsed or handed to a checker until the regenerated digest matches — because
   regenerating `F(S, m)` is the expensive step and a bogus digest must not be
   able to trigger it more cheaply than the bounded decompression.
-- **A-4 checkers/disk**: caps + deadline (`CheckBudget`: drat-trim 600 s,
-  cake_lpr 900 s, lrat-check 300 s, 1500 s overall for the whole proof
-  stage); drat-trim's LRAT emission can reach
-  low GB for a 1 GiB DRAT (the regenerated DIMACS itself is up to ~4 GB at
-  the band's edge) — the runner's scratch has the space; a proof designed to
-  be slow simply times out (`RESOURCE_EXCEEDED`, no score).
+- **A-4 checkers/disk**: caps + deadline per profile (`CheckBudget`:
+  `record` drat-trim 3600 s, cake_lpr 3600 s, lrat-check 1800 s, 9000 s
+  overall; `standard` 600 / 900 / 300 s, 1500 s overall); drat-trim's LRAT
+  emission can reach low GB (the regenerated DIMACS itself is up to ~27 GB at
+  the record band's edge, written once — the pipeline reuses the streamed
+  file) — the record runner's ≥ 150 GiB scratch has the space and the
+  profile refuses to start below 64 GiB free; a proof designed to be slow
+  simply times out (`RESOURCE_EXCEEDED`, no score).
 
 ## 6. Residual risks (accepted, documented)
 
