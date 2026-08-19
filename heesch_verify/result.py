@@ -130,7 +130,12 @@ class Result:
     proof_core_clauses: int = 0    # > 0 when checked on a verified core subset of F
     hh_exact: bool = False         # Hh established exactly (= hh_verified)
     exact: bool = False            # Hc = Hh = hc_verified established exactly
-    record_eligible: bool = False  # exact, proof-backed, hc_verified >= 5
+    # Record flags (§2.3/§13.9): `record_eligible` = proof-backed non-tiler
+    # with hc_verified >= 5 — a certified record-breaking lower bound whatever
+    # the exact value (Hc in {Hh-1, Hh}); `record_exact` additionally requires
+    # `exact` (Hc = Hh = hc pinned by a proof at m = hh + 1).
+    record_eligible: bool = False
+    record_exact: bool = False
     # Frozen conventions (§11) written into every record.
     conventions: dict = field(default_factory=dict)
 
@@ -174,6 +179,7 @@ class Result:
             "hh_exact": self.hh_exact,
             "exact": self.exact,
             "record_eligible": self.record_eligible,
+            "record_exact": self.record_exact,
             "conventions": dict(self.conventions),
         }
         return out

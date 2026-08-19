@@ -120,8 +120,11 @@ search loop; they are API (`docs/heesch-verifier-architecture.md` §8).
 `exact_proof` — the latter only when a checked proof pins `Hc = Hh = k`),
 `census_hc/census_hh` (Kaplan's published values, census shapes only),
 `proof_m`, `proof_cnf_digest`, `proof_checkers`, `hh_exact`, `exact`
-(`Hc = Hh = k` established), and `record_eligible` (exact, proof-backed,
-`hc ≥ 5`). Only `hc_verified` is a Heesch number.
+(`Hc = Hh = k` established), `record_eligible` (proof-backed, `hc ≥ 5`: a
+checked finite upper bound on `Hh` plus a verified 5-corona beats the known
+`Hc = 4` whatever the exact value, since `Hc ∈ {Hh − 1, Hh}`) and
+`record_exact` (`record_eligible` and `exact`). Only `hc_verified` is a
+Heesch number.
 
 ## Rules that will reject your submission
 
@@ -161,8 +164,8 @@ search loop; they are API (`docs/heesch-verifier-architecture.md` §8).
   `CENSUS_CONTRADICTION` — that would mean the verifier or the census is
   wrong, and it is never scored.
 
-Record claims (`record_eligible`) are machine-checked but additionally
-reviewed by the maintainers before being announced
+Record claims (`record_eligible`, `record_exact`) are machine-checked but
+additionally reviewed by the maintainers before being announced
 (`docs/heesch-verifier-architecture.md` §13.9); the soundness theorem and
 its obligations are in `docs/soundness-note.md`.
 

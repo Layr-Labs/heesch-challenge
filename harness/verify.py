@@ -96,6 +96,22 @@ def _with(result: Result, **fields) -> Result:
     return Result(**kwargs)
 
 
+def _record_eligible(evidence: str, hc_verified: int) -> bool:
+    """The machine-checkable precondition for a new class record (§2.3/§13.9).
+
+    Non-tilerhood established by a checked UNSAT proof of F(S, m) gives a
+    finite upper bound Hh <= m - 1, and a verified witness gives Hc >= hc.
+    Since Hc <= Hh, `hc >= 5` with ANY such certificate already beats the
+    known value 4 — whatever the exact value turns out to be (Hc in
+    {Hh - 1, Hh}, so a shape with Hc = 5 may well have Hh = 6 and need
+    F(S,7)). Exactness is a separate flag (`exact` / `record_exact`); it is
+    NOT required to be record-breaking (audit 2026-08-19 High 1). Census
+    evidence cannot reach hc >= 5 (the census maxima are 2/3/3) and would
+    trip CENSUS_CONTRADICTION first, but the predicate insists on a proof
+    anyway."""
+    return evidence == "proof" and hc_verified >= 5
+
+
 def _run_proof_gate(sub, outcome):
     # Checker binaries: the harness may be running from the installed copy in
     # .venv-bench (python -I), so the package-relative default in
@@ -214,6 +230,9 @@ def main() -> None:
         claim += f"; non-tiler by checked UNSAT proof of F(S,{proof_verdict.m})"
         if exact:
             claim += f"; Hc = Hh = {result.hc_verified} exactly"
+        elif _record_eligible(evidence, result.hc_verified):
+            claim += (f"; record-breaking lower bound: Hc >= {result.hc_verified}, "
+                      f"Hh <= {proof_verdict.m - 1}")
         result = _with(
             result,
             proof_status="VERIFIED",
@@ -241,7 +260,8 @@ def main() -> None:
         tier=tier,
         hh_exact=hh_exact,
         exact=exact,
-        record_eligible=bool(exact and evidence == "proof" and result.hc_verified >= 5),
+        record_eligible=_record_eligible(evidence, result.hc_verified),
+        record_exact=bool(_record_eligible(evidence, result.hc_verified) and exact),
     )
     payload = _score_payload(result, defect_res)
     payload["metrics"]["gate_detail"] = gate_detail

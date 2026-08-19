@@ -116,3 +116,4 @@ def test_gate_detail_reaches_score_json(tmp_path):
     assert metrics["tier"] == "lower_bound"
     assert (metrics["census_hc"], metrics["census_hh"]) == (1, 1)
     assert metrics["exact"] is True and metrics["record_eligible"] is False
+    assert metrics["record_exact"] is False  # census evidence, hc = 1

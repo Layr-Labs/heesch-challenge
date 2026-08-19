@@ -234,7 +234,7 @@ def test_real_proof_scores_through_the_harness(tmp_path, unsat_proof):
     assert m["proof_checkers"] == ["cake_lpr", "drat-trim"]
     # m = 3 = hh + 2: non-tiler certified, hh NOT pinned exactly (Hh in {1,2}).
     assert m["hh_exact"] is False and m["exact"] is False
-    assert m["record_eligible"] is False
+    assert m["record_eligible"] is False and m["record_exact"] is False  # hc = 1 < 5
     assert "checked UNSAT proof of F(S,3)" in m["verified_claim"]
     # Provenance: declared format AND what the bytes actually were.
     assert m["proof_format"] == "drat" and m["proof_format_detected"] == "drat-text"
@@ -362,5 +362,5 @@ def test_census_shape_plus_exact_proof(tmp_path):
     assert m["gate_detail"] == "nontiler:census+proof:v2:m=2"
     assert (m["census_hc"], m["census_hh"]) == (1, 1)
     assert m["hh_exact"] is True and m["exact"] is True
-    assert m["record_eligible"] is False  # exact, but hc = 1 < 5
+    assert m["record_eligible"] is False and m["record_exact"] is False  # exact, but hc = 1 < 5
     assert "Hc = Hh = 1 exactly" in m["verified_claim"]

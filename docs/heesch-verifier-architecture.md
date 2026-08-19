@@ -110,8 +110,13 @@ Decision table (after the witness and defect passes):
   every other accepted entry is `tier = lower_bound` (census-backed, or a
   proof at `m > hh + 1` that certifies non-tilerhood without pinning the
   value).
-- `record_eligible = exact and non_tiler_evidence == proof and hc_verified >= 5`
-  — the machine-checkable precondition for claiming a new class record. A
+- `record_eligible = non_tiler_evidence == proof and hc_verified >= 5` —
+  the machine-checkable precondition for claiming a new class record: a
+  checked proof of `F(S, m)` gives `Hh <= m - 1` (finite), the witness gives
+  `Hc >= hc_verified`, and `Hc <= Hh`, so `hc_verified >= 5` beats the known
+  value 4 whatever the exact value (`Hc ∈ {Hh − 1, Hh}`: a shape with
+  `Hc = 5` may have `Hh = 6` and then needs `F(S, 7)`, not `F(S, 6)`).
+  Exactness is separate: `record_exact = record_eligible and exact`. A
   record claim additionally requires the human review in §13.9.
 
 The score scalar (§9.2.6) is `hc_verified + fractional defect progress` for
@@ -270,7 +275,7 @@ plus `score_fraction_num/den` in metrics.
 `proof_format_detected` (sniffed from the bytes; a disagreement is
 `GATE_PROOF_INVALID` before any checker runs),
 `proof_checkers` (sorted names of the checkers that returned VERIFIED),
-`hh_exact`, `exact`, `record_eligible`. `gate_tier ∈ {nontiler_census,
+`hh_exact`, `exact`, `record_eligible`, `record_exact`. `gate_tier ∈ {nontiler_census,
 nontiler_proof}`. Timings are never recorded (determinism).
 
 ## 10. Calibration corpus
@@ -432,15 +437,17 @@ capabilities. They read two path arguments and stdin is `/dev/null`.
 
 ### 13.9 Record procedure (in-band and out-of-band)
 
-A `record_eligible` entry (exact, proof-backed, `hc_verified >= 5`) is a
-machine-checked research claim. Two ways it can arise:
+A `record_eligible` entry (proof-backed, `hc_verified >= 5`; `record_exact`
+when the value is also pinned) is a machine-checked research claim. Two
+ways it can arise:
 
 **In-band.** The submission carries the `F(S, k+1)` proof and the harness
 verifies it inside the benchmark job (bands in §13.3: an `Hc = 5` certificate
 for shapes up to 12 cells is producible and inside the band, but checking it
 needs a runner with ≥ 12 GB RAM for `cake_lpr`'s heap — the standard 8 GB
 runner answers `RESOURCE_EXCEEDED`; `docs/ml-feasibility.md`). The score is
-recorded like any other; the `record_eligible` flag is set from the metrics.
+recorded like any other; the `record_eligible` / `record_exact` flags are
+set from the metrics.
 
 **Out-of-band.** A witness whose shape or depth is outside the in-harness
 band cannot score by itself (fail closed: `RESOURCE_EXCEEDED` for the proof,
