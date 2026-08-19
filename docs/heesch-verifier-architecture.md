@@ -266,7 +266,9 @@ plus `score_fraction_num/den` in metrics.
 ### 9.3 Non-tiler evidence (§2.2/§2.3)
 `non_tiler_evidence` (`census|proof`), `tier` (`lower_bound|exact_proof`),
 `census_hc`, `census_hh` (null unless a census shape), `proof_status`,
-`proof_m`, `proof_cnf_digest`, `proof_sha256`, `proof_format`,
+`proof_m`, `proof_cnf_digest`, `proof_sha256`, `proof_format` (declared),
+`proof_format_detected` (sniffed from the bytes; a disagreement is
+`GATE_PROOF_INVALID` before any checker runs),
 `proof_checkers` (sorted names of the checkers that returned VERIFIED),
 `hh_exact`, `exact`, `record_eligible`. `gate_tier ∈ {nontiler_census,
 nontiler_proof}`. Timings are never recorded (determinism).

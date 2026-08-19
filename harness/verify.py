@@ -221,6 +221,7 @@ def main() -> None:
             proof_cnf_digest=proof_verdict.cnf_digest,
             proof_sha256=proof_verdict.proof_sha256,
             proof_format=proof_verdict.fmt,
+            proof_format_detected=proof_verdict.detected_format,
             proof_checkers=tuple(proof_verdict.checkers_verified),
             proof_core_clauses=proof_verdict.core_clauses,
         )

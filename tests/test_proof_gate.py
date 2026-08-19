@@ -236,6 +236,43 @@ def test_real_proof_scores_through_the_harness(tmp_path, unsat_proof):
     assert m["hh_exact"] is False and m["exact"] is False
     assert m["record_eligible"] is False
     assert "checked UNSAT proof of F(S,3)" in m["verified_claim"]
+    # Provenance: declared format AND what the bytes actually were.
+    assert m["proof_format"] == "drat" and m["proof_format_detected"] == "drat-text"
+
+
+def test_declared_format_must_match_detected(tmp_path, unsat_proof):
+    """Audit 2026-08-19 Medium 4: an LRAT filed under a .drat name and declared
+    `drat` used to be checked down the LRAT route and recorded as format drat.
+    Now the declaration must agree with the sniffed bytes, and the mismatch
+    rejects before any checker runs."""
+    d = checker_dir_for_tests(tmp_path)
+    if d is None:
+        pytest.skip("tools/bin checkers not built")
+    enc = unsat_proof["enc"]
+    # Convert the DRAT to an LRAT with drat-trim (the same converter the gate uses).
+    work = tmp_path / "conv"
+    work.mkdir()
+    (work / "f.cnf").write_bytes(enc.dimacs)
+    (work / "p.drat").write_bytes(unsat_proof["drat"])
+    subprocess.run([str(d / "drat-trim"), str(work / "f.cnf"), str(work / "p.drat"),
+                    "-L", str(work / "p.lrat")], capture_output=True, check=False)
+    lrat = (work / "p.lrat").read_bytes()
+    assert lrat, "drat-trim did not emit an LRAT"
+    sha = hashlib.sha256(lrat).hexdigest()
+    text = CENSUS_11 + _block(3, enc.digest, enc.num_vars, enc.num_clauses, "proof.drat",
+                              "drat", "none", sha)
+    proc, score = _run_harness(tmp_path, text, files=[("proof.drat", lrat)], checker_dir=d)
+    assert proc.returncode != 0 and score is None
+    assert "REJECTED: GATE_PROOF_INVALID" in proc.stdout
+    assert "declared format 'drat' but the file is lrat-text" in proc.stdout
+    # And the honest declaration of the same bytes verifies.
+    text = CENSUS_11 + _block(3, enc.digest, enc.num_vars, enc.num_clauses, "proof.lrat",
+                              "lrat", "none", sha)
+    proc, score = _run_harness(tmp_path, text, files=[("proof.lrat", lrat)], checker_dir=d)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    m = score["metrics"]
+    assert m["proof_format"] == "lrat" and m["proof_format_detected"] == "lrat-text"
+    assert m["proof_checkers"] == ["cake_lpr", "lrat-check"]
 
 
 def test_tampered_proof_is_rejected(tmp_path, unsat_proof):

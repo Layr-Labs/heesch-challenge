@@ -124,7 +124,8 @@ class Result:
     proof_m: int = 0
     proof_cnf_digest: str = ""
     proof_sha256: str = ""
-    proof_format: str = ""
+    proof_format: str = ""             # declared in the #PROOF block (drat | lrat)
+    proof_format_detected: str = ""    # sniffed from the bytes (e.g. lrat-text); must agree
     proof_checkers: tuple = ()
     proof_core_clauses: int = 0    # > 0 when checked on a verified core subset of F
     hh_exact: bool = False         # Hh established exactly (= hh_verified)
@@ -167,6 +168,7 @@ class Result:
             "proof_cnf_digest": self.proof_cnf_digest,
             "proof_sha256": self.proof_sha256,
             "proof_format": self.proof_format,
+            "proof_format_detected": self.proof_format_detected,
             "proof_checkers": list(self.proof_checkers),
             "proof_core_clauses": self.proof_core_clauses,
             "hh_exact": self.hh_exact,

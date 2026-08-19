@@ -64,6 +64,17 @@ class ProofOutcome:
     check_seconds: float = 0.0
     checker_results: tuple = field(default_factory=tuple)
     core_clauses: int = 0          # > 0 when the checkers ran on a verified core subset
+    detected_format: str = ""      # formats.ProofFormat.value sniffed from the bytes
+
+
+def format_class(fmt: ProofFormat) -> str:
+    """The submission-schema class ("drat" | "lrat") of a sniffed format, or
+    "" when the bytes are not a proof at all."""
+    if fmt in (ProofFormat.DRAT_TEXT, ProofFormat.DRAT_BINARY):
+        return "drat"
+    if fmt is ProofFormat.LRAT_TEXT:
+        return "lrat"
+    return ""
 
 
 @dataclass(frozen=True)
@@ -73,6 +84,11 @@ class ProofSubmission:
     claimed_vars: int
     claimed_clauses: int
     claimed_core_clauses: int = 0   # with a core list: its declared clause count
+    # The format the submitter DECLARED ("drat" | "lrat"; "" = unchecked, for
+    # library callers). The pipeline dispatches on the sniffed bytes, so a
+    # mismatch is rejected rather than silently re-routed and misreported
+    # (audit 2026-08-19 Medium 4).
+    declared_format: str = ""
 
 
 def _has_empty_clause(dimacs: bytes) -> bool:
@@ -211,13 +227,19 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
             "a SAT model is not an UNSAT proof",
             cnf_digest=enc.digest, proof_bytes=proof_bytes,
         )
+    if sub.declared_format and sub.declared_format != format_class(fmt):
+        return ProofOutcome(
+            ProofStatus.GATE_PROOF_INVALID,
+            f"declared format {sub.declared_format!r} but the file is {fmt.value}",
+            cnf_digest=enc.digest, proof_bytes=proof_bytes, detected_format=fmt.value,
+        )
     if fmt in (ProofFormat.DRAT_TEXT, ProofFormat.LRAT_TEXT) and not tail_wellformed(sub.proof_path):
         return ProofOutcome(ProofStatus.PROOF_TRUNCATED, "proof does not end on a terminated line",
-                            cnf_digest=enc.digest, proof_bytes=proof_bytes)
+                            cnf_digest=enc.digest, proof_bytes=proof_bytes, detected_format=fmt.value)
     if core_path is not None and fmt is not ProofFormat.LRAT_TEXT:
         return ProofOutcome(ProofStatus.GATE_PROOF_INVALID,
                             "a core clause list is only valid with an LRAT proof",
-                            cnf_digest=enc.digest, proof_bytes=proof_bytes)
+                            cnf_digest=enc.digest, proof_bytes=proof_bytes, detected_format=fmt.value)
 
     # 6. Checkers.
     with tempfile.TemporaryDirectory() as td:
@@ -306,19 +328,19 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
                 cnf_digest=enc.digest, encoder_vars=enc.num_vars,
                 encoder_clauses=enc.num_clauses, cnf_bytes=cnf_bytes,
                 proof_bytes=proof_bytes, check_seconds=seconds,
-                checker_results=tuple(results),
+                checker_results=tuple(results), detected_format=fmt.value,
             )
         return ProofOutcome(ProofStatus.CHECKER_UNAVAILABLE,
                             "; ".join(f"{r.checker}: {r.detail}" for r in results),
                             cnf_digest=enc.digest, proof_bytes=proof_bytes,
-                            checker_results=tuple(results), check_seconds=seconds)
+                            checker_results=tuple(results), detected_format=fmt.value, check_seconds=seconds)
     if any(r.status is ck.CheckStatus.RESOURCE_EXCEEDED for r in results):
         return ProofOutcome(ProofStatus.RESOURCE_EXCEEDED,
                             "checker resource limit: " + "; ".join(
                                 f"{r.checker} {r.status.value} after {r.seconds:.0f}s"
                                 + (f" ({r.detail[:160]})" if r.detail else "") for r in results),
                             cnf_digest=enc.digest, proof_bytes=proof_bytes,
-                            checker_results=tuple(results), check_seconds=seconds)
+                            checker_results=tuple(results), detected_format=fmt.value, check_seconds=seconds)
 
     need = 2 if tier is Tier.RECORD else 1
     verified = [r for r in results if r.status is ck.CheckStatus.VERIFIED]
@@ -329,11 +351,11 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
             cnf_digest=enc.digest, encoder_vars=enc.num_vars,
             encoder_clauses=enc.num_clauses, cnf_bytes=cnf_bytes,
             proof_bytes=proof_bytes, check_seconds=seconds,
-            checker_results=tuple(results), core_clauses=core_clauses,
+            checker_results=tuple(results), detected_format=fmt.value, core_clauses=core_clauses,
         )
     return ProofOutcome(
         ProofStatus.GATE_PROOF_INVALID,
         "; ".join(f"{r.checker}: {r.status.value} {r.detail[:120]}" for r in results),
         cnf_digest=enc.digest, proof_bytes=proof_bytes,
-        checker_results=tuple(results), check_seconds=seconds,
+        checker_results=tuple(results), detected_format=fmt.value, check_seconds=seconds,
     )

@@ -85,6 +85,7 @@ class ProofVerdict:
     hh_exact: bool = False
     exact: bool = False
     core_clauses: int = 0
+    detected_format: str = ""   # what the bytes were (formats.ProofFormat value)
 
     def to_json(self) -> dict:
         return {
@@ -94,6 +95,7 @@ class ProofVerdict:
             "cnf_digest": self.cnf_digest,
             "proof_sha256": self.proof_sha256,
             "format": self.fmt,
+            "format_detected": self.detected_format,
             "checkers_verified": list(self.checkers_verified),
             "hh_exact": self.hh_exact,
             "exact": self.exact,
@@ -314,6 +316,7 @@ class ProofCarryingGate:
                 claimed_vars=block.num_vars,
                 claimed_clauses=block.num_clauses,
                 claimed_core_clauses=block.core_clauses,
+                declared_format=block.fmt,
             )
             tile = frozenset(canonical_form(sub.cells, sub.grid, True))
             try:
@@ -335,6 +338,7 @@ class ProofCarryingGate:
             return ProofVerdict(
                 ErrorCode(out.status.value), out.detail, m=m,
                 cnf_digest=out.cnf_digest, proof_sha256=payload_sha, fmt=block.fmt,
+                detected_format=out.detected_format,
             )
         verified = tuple(sorted(
             r.checker for r in out.checker_results if r.status.value == "VERIFIED"
@@ -343,4 +347,5 @@ class ProofCarryingGate:
             None, out.detail, m=m, cnf_digest=out.cnf_digest,
             proof_sha256=payload_sha, fmt=block.fmt, checkers_verified=verified,
             hh_exact=hh_exact, exact=exact, core_clauses=out.core_clauses,
+            detected_format=out.detected_format,
         )
