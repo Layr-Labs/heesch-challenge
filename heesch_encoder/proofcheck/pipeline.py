@@ -145,7 +145,8 @@ def check_proof(sub: ProofSubmission, tile_cells, patch_cells, grid, contact,
 def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
                    tier: Tier = Tier.RECORD, timeout: float = 3600.0,
                    bin_dir=None, budget=None, core_path=None,
-                   encode_timeout_s: float | None = None) -> ProofOutcome:
+                   encode_timeout_s: float | None = None,
+                   enforce_band: bool = True) -> ProofOutcome:
     """v2 path: regenerate the multilevel F(S, m) then the same frozen
     steps. UNSAT verified here means no weak m-configuration exists —
     Hh <= m-1 over ALL patches (multilevel spec §2.2).
@@ -157,7 +158,12 @@ def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
     `encode_timeout_s` bounds ONLY the in-process encoding step (guard.py);
     it is additionally clipped to the budget's remaining time. The checkers
     are bounded by `budget` (CheckBudget caps + overall deadline), never by
-    this guard — audit 2026-08-19 Medium 5."""
+    this guard — audit 2026-08-19 Medium 5.
+
+    `enforce_band=False` skips the feasibility-band policy (the out-of-band
+    record re-check of architecture §13.9, run by a maintainer on a machine
+    without the job's caps — e.g. F(S,7) for an Hc = 5, Hh = 6 candidate).
+    The harness never passes it."""
     import math
     import time
 
@@ -165,7 +171,7 @@ def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
     from .guard import EncodeTimeout, wall_clock_guard
 
     n_cells = len(frozenset(tile_cells))
-    if not in_feasibility_band(n_cells, m):
+    if enforce_band and not in_feasibility_band(n_cells, m):
         return ProofOutcome(
             ProofStatus.RESOURCE_EXCEEDED,
             f"({n_cells} cells, m={m}) is outside the encoder feasibility band",

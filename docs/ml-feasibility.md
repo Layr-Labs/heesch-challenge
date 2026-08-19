@@ -129,7 +129,8 @@ laptop, single core), streamed encoder:
 | Kaplan Hc=4 11-hex | 11 | 6 | 948 747 | 17 237 371 | 112 | 2.13 GB | 2.5 GB (was 14.6 GB before streaming) |
 
 Full record-scale cycle for the 11-hex `F(S,6)` (the size of an Hc = 5
-certificate for a shape of that size): solve UNSAT in 157 s (cadical153,
+certificate for a shape of that size **when Hh = 5**; an Hc = 5 shape with
+Hh = 6 needs `F(S,7)` — see "F(S,7)" below): solve UNSAT in 157 s (cadical153,
 proof logging; DRAT 2.2 GB), drat-trim verify + LRAT emission 61 s (LRAT
 513 MB, **25 MB xz**), lrat-check 16 s. So an Hc = 5 proof for a ≤ 12-cell
 shape is producible on a laptop in under ten minutes; participants submit

@@ -286,6 +286,12 @@ def main(argv=None) -> int:
     ap.add_argument("--no-selfcheck", action="store_true",
                     help="skip the drat-trim self-check of the DRAT (default: run it when tools/bin/drat-trim exists)")
     ap.add_argument("--check", action="store_true", help="run the harness's ProofCarryingGate afterwards")
+    ap.add_argument("--band", choices=("harness", "encoder", "none"), default="harness",
+                    help="which (cells, m) band to respect: `harness` (default — warn when the "
+                         "benchmark job would answer RESOURCE_EXCEEDED, refuse outside the encoder "
+                         "band), `encoder` (refuse only outside the encoder's measured band), or "
+                         "`none` (out-of-band: encode anything, e.g. F(S,7) for an Hc = 5, Hh = 6 "
+                         "candidate — architecture §13.9); also selects the band for --check")
     args = ap.parse_args(argv)
 
     from heesch_verify.parse import (
@@ -343,11 +349,13 @@ def main(argv=None) -> int:
     if m < hh + 1:
         return _fail(f"m={m} but the witness verifies hh={hh}; need m >= {hh + 1}")
     n = len(sub.cells)
-    if not in_feasibility_band(n, m):
-        return _fail(f"({n} cells, m={m}) is outside the encoder feasibility band")
+    if args.band != "none" and not in_feasibility_band(n, m):
+        return _fail(f"({n} cells, m={m}) is outside the encoder feasibility band "
+                     "(pass --band none for an out-of-band proof, architecture §13.9)")
     if not in_harness_band(n, m):
         print(f"warning: ({n} cells, m={m}) is outside the in-harness proof band "
-              f"{HARNESS_PROOF_BAND}; the harness will answer RESOURCE_EXCEEDED", file=sys.stderr)
+              f"{HARNESS_PROOF_BAND}; the harness will answer RESOURCE_EXCEEDED — this proof "
+              "can only be checked out of band (architecture §13.9)", file=sys.stderr)
 
     try:
         import pysat  # noqa: F401
@@ -471,10 +479,11 @@ def main(argv=None) -> int:
           + (" — exact (m = hh + 1)" if m == hh + 1 else " — non-tiler certificate (lower bound stays)"))
 
     if args.check:
-        from heesch_verify.proofgate import ProofCarryingGate
+        from heesch_verify.proofgate import ProofCarryingGate, named_band
 
         outcome2 = verify_witness(new_text, VerifyConfig())
-        verdict = ProofCarryingGate(shape_path.parent, checker_dir).check(outcome2.submission, outcome2)
+        verdict = ProofCarryingGate(shape_path.parent, checker_dir,
+                                    band=named_band(args.band)).check(outcome2.submission, outcome2)
         print("gate:", verdict.to_json())
         return 0 if verdict.code is None else 1
     return 0

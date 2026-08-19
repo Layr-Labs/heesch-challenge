@@ -7,16 +7,22 @@ largest known Heesch number is **Hc = 4** (Kaplan 2022, "Heesch Numbers of
 Unmarked Polyforms", exhaustive to 19-ominoes / 17-hexes / 24-iamonds:
 [arXiv:2105.09438](https://arxiv.org/abs/2105.09438), data at
 [cs.uwaterloo.ca/~csk/heesch](https://cs.uwaterloo.ca/~csk/heesch/)). Every
-known Hc = 4 example is small: five polyhexes of 11, 13, 15, 15 and 16 cells
-and one 20-iamond; no polyomino up to 19 cells exceeds Hc = 3 (two 17-ominoes).
+known Hc = 4 example is small: six polyhexes of 11, 13, 15, 15, 16 and 17
+cells and one 20-iamond; no polyomino up to 19 cells exceeds Hc = 3 (two
+17-ominoes).
 No unmarked polyomino, polyhex or polyiamond with **Hc ≥ 5** is documented in
 that exhaustive search or in the literature reviewed for this benchmark.
 (Higher values are known outside this class: Heesch number 5 for *marked*
 polyforms, and Bašić's general planar figure with Heesch number 6,
-[PMC7812982](https://pmc.ncbi.nlm.nih.gov/articles/PMC7812982/).) The band
-above the census — 11–200 cells for ominoes, 9–200 for hexes, 13–200 for
-iamonds — is essentially unexplored. A **proof-backed** Hc = 5 here is a
-research result, not a benchmark score.
+[PMC7812982](https://pmc.ncbi.nlm.nih.gov/articles/PMC7812982/).) Two bands
+matter here: the **embedded exact census** (polyominoes ≤ 10, polyhexes ≤ 8,
+polyiamonds ≤ 12 — decided in-harness, no proof needed) and Kaplan's
+**published exhaustive search** (≤ 19 / ≤ 17 / ≤ 24 — every shape there has a
+known Heesch number, but a submission in 11–19 / 9–17 / 13–24 cells still
+needs a proof because those tables are not embedded). Beyond 19 / 17 / 24
+cells, up to the 200-cell limit, the class is broadly unexplored. A
+**proof-backed** Hc = 5 anywhere here is a research result, not a benchmark
+score.
 
 An optimization benchmark on the Yukon platform (Eigen / Layr-Labs).
 Format-compatible with Epoch AI's FrontierMath Heesch challenge (the
@@ -84,6 +90,7 @@ k+1 <a,b,c,d,e,f>
 encoder heesch-encoder/v2 2 <m>
 cnf <cnf_sha256> <num_vars> <num_clauses>
 file <basename> <drat|lrat> <none|xz> <payload_sha256>
+core <basename> <none|xz> <payload_sha256> <num_clauses>   # optional, lrat only
 ```
 
 `P = 1` when `hh == hc`; `P = 2` when `hh == hc + 1` (second patch may have
@@ -147,13 +154,16 @@ Heesch number.
   (`PROOF_LEVEL_INCONSISTENT`); the size must be inside the in-harness band
   (≤ 12 cells `m ≤ 6`, ≤ 20 `m ≤ 5`, ≤ 50 `m ≤ 3`, ≤ 100 `m ≤ 2`, else
   `RESOURCE_EXCEEDED` — every known Hc = 4 shape's exactness proof `F(S,5)`
-  fits; an `Hc ≥ 5` certificate `F(S,6)` is producible for shapes up to
-  12 cells (measured: ~2 min to encode, ~3 min to solve, 25 MB xz LRAT) and
-  is checked in-band because the checkers only load the proof's core clauses
-  (see `docs/heesch-verifier-architecture.md` §13.3 5b; without a core list
-  the formally-verified checker needs > 6 GB and the standard 8 GB runner
-  answers `RESOURCE_EXCEEDED`, routing the entry to the out-of-band record
-  procedure, §13.9);
+  fits; an `Hc ≥ 5` certificate is `F(S,6)` when `Hh = 5` — producible for
+  shapes up to 12 cells (measured: ~2 min to encode, ~3 min to solve, 25 MB
+  xz LRAT) and checked in-band because the checkers only load the proof's
+  core clauses (see `docs/heesch-verifier-architecture.md` §13.3 5b; without
+  a core list the formally-verified checker needs > 6 GB and the standard
+  8 GB runner answers `RESOURCE_EXCEEDED`) — but `F(S,7)` when `Hh = 6`
+  (`Hc ∈ {Hh − 1, Hh}`), which is out of band: submit the witness anyway,
+  produce the proof with `tools/prove.py … --m 7 --band none`, and file it
+  for the out-of-band record procedure (§13.9; `python -m heesch_verify
+  --check-proof --band none` is the maintainers' re-check);
   a proof block that is present but broken rejects even a census shape.
   `m = hh + 1` makes the value exact; larger `m` certifies non-tilerhood
   with the lower bound only.
@@ -193,5 +203,6 @@ This is a schema v1 (single-track) benchmark — no tracks; `yukon tracks` /
 | `docs/heesch-verifier-architecture.md` | The acceptance rule, pipeline, error codes, record fields |
 | `docs/heesch-cnf-encoder-spec.md`, `docs/heesch-multilevel-encoder-spec.md` | The encoders and their soundness obligations |
 | `docs/THREAT-MODEL.md`, `docs/CONVENTIONS.md`, `docs/soundness-note.md` | Threat model, frozen conventions (revision v1), the soundness theorems |
+| `docs/STATUS.md` | Living status: what the verifier does today + every audit finding's state |
 | `docs/audits/` | External audits and our responses |
 | `tests/` | Calibration, census, adversarial, metamorphic, fuzz, encoder round-trip, proof e2e suites |

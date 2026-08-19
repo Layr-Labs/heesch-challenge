@@ -185,7 +185,10 @@ must also encode inside the benchmark job (architecture §13.3).
 Measured (docs/ml-feasibility.md): every known `Hc = 4` shape (11–20 cells)
 has its exactness proof `F(S, 5)` inside both bands (11-hex: 60 s encode,
 UNSAT in ~30 s; 20-iamond: 173 s encode). **An `Hc = 5` certificate is
-`F(S, 6)`**: for the 11-hex it encodes in 112 s at 2.5 GB RSS (17.2 M
+`F(S, 6)` when `Hh = 5`, and `F(S, 7)` when `Hh = 6`** (`Hc ∈ {Hh − 1, Hh}`,
+so a genuine `Hc = 5` shape may have a real hole-permitted 6-corona; then
+`F(S, 6)` is SAT and the finite certificate must be `F(S, 7)` — see
+§10.2a below and audit 2026-08-19 High 1). For the 11-hex `F(S, 6)` encodes in 112 s at 2.5 GB RSS (17.2 M
 clauses, 2.1 GB DIMACS), is UNSAT in 157 s, drat-trim verifies and emits the
 LRAT in 61 s (513 MB, 25 MB xz), lrat-check verifies in 16 s. The
 formally-verified `cake_lpr` needs more than ~6 GB of heap to load that CNF:
@@ -195,6 +198,22 @@ never `NOT_VERIFIED`); on a ≥ 12 GB machine it is checked in-band. Larger
 shapes at m = 6 (a 20-cell shape would be ~5× that) are the next widening
 question, and beyond what the runner can check the out-of-band record
 procedure applies (architecture §13.9).
+
+### 10.2a The `Hc = 5, Hh = 6` case and the out-of-band band selection
+
+The record flag does not require exactness (architecture §2.3): a verified
+`hc >= 5` plus ANY checked `F(S, m)` UNSAT is record-breaking. But the level
+rule `m >= hh_verified + 1` means a candidate whose witness shows a real
+hole-permitted 6-corona can only be certified by `F(S, 7)`, which is outside
+both bands as measured (`docs/ml-feasibility.md`, "F(S,7)" rows). The code
+therefore exposes the band as a parameter instead of a constant:
+`ProofCarryingGate(..., band=...)`, `check_proof_v2(..., enforce_band=False)`,
+`python -m heesch_verify --check-proof --band {harness,encoder,none}` and
+`tools/prove.py --band {harness,encoder,none}`. The harness never selects
+anything but `harness` (no environment variable, no configuration file);
+`encoder` and `none` exist for the maintainer's out-of-band re-check
+(architecture §13.9) on a machine without the job's caps. Widening a band
+after a measurement changes no CNF byte and is not a revision bump.
 
 ## 11. Frozen constants (revision 2)
 

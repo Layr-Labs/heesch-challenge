@@ -3,6 +3,9 @@ without building clause objects. This is the Phase B gate — the published
 (cells, m) band decision comes from this table.
 
 Usage: python tools/ml_feasibility.py out.md
+       python tools/ml_feasibility.py --shape NAME|FILE --m M [--m M2 ...]
+         (counts for one shape at the given levels, printed; NAME is a key of
+          KAPLAN_SHAPES, FILE a submission text file)
 """
 
 from __future__ import annotations
@@ -24,6 +27,19 @@ from heesch_verify.parse import parse_submission  # noqa: E402
 from heesch_verify.patch import contact_neighbors, required_set  # noqa: E402
 
 ROW_BUDGET_S = 120.0
+
+# Record-adjacent reference shapes from Kaplan 2022's published data
+# (cs.uwaterloo.ca/~csk/heesch/, coordinates exactly as listed there — the
+# same convention tools/gen_census_tables.py reads). Used for the
+# record-scale measurements in docs/ml-feasibility.md: the Hc = 4 11-hex is
+# the smallest shape with the known-record value, so F(S,6) (Hc = 5 with
+# Hh = 5) and F(S,7) (Hc = 5 with Hh = 6) for a shape of its size are the
+# instances an in-band / out-of-band record check must be able to handle.
+KAPLAN_SHAPES = {
+    # hex/11hex_3up.txt, the one "Hc = 4 Hh = 4" entry
+    "hex11-kaplan-hc4hh4": ("H", [(-3, 2), (-3, 4), (-2, 2), (-2, 4), (-1, 1), (-1, 3),
+                                   (0, 0), (0, 1), (0, 2), (0, 3), (1, 0)]),
+}
 
 
 def count_formula(tile, grid, contact, m):
@@ -105,7 +121,40 @@ def synth_shapes():
     ]
 
 
+def _one_shape(argv):
+    import argparse
+
+    ap = argparse.ArgumentParser(prog="ml_feasibility.py --shape")
+    ap.add_argument("--shape", required=True, help="KAPLAN_SHAPES key or a submission file")
+    ap.add_argument("--m", type=int, action="append", required=True)
+    ap.add_argument("--budget", type=float, default=None, help="seconds per row")
+    args = ap.parse_args(argv)
+    if args.budget is not None:
+        globals()["ROW_BUDGET_S"] = args.budget
+    if args.shape in KAPLAN_SHAPES:
+        gid, cells = KAPLAN_SHAPES[args.shape]
+        name = args.shape
+    else:
+        sub = parse_submission(pathlib.Path(args.shape).read_text(encoding="ascii"))
+        gid, cells, name = sub.grid_id, list(sub.cells), pathlib.Path(args.shape).stem
+    grid = GRIDS[gid]
+    contact = grid.contact("point")
+    for m in args.m:
+        try:
+            r = count_formula(frozenset(cells), grid, contact, m)
+        except (TimeoutError, MemoryError) as e:
+            print(f"{name} ({gid}, {len(cells)} cells) m={m}: DNF ({type(e).__name__})", flush=True)
+            continue
+        print(f"{name} ({gid}, {len(cells)} cells) m={m}: u={'/'.join(map(str, r['u']))} "
+              f"vars={r['vars'] + r['aux']} clauses={r['clauses']} "
+              f"(f1={r['f1']} f2={r['f2']} f4={r['f4']} f5={r['f5']} f6={r['f6']}) {r['secs']}s",
+              flush=True)
+    return 0
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--shape":
+        sys.exit(_one_shape(sys.argv[1:]))
     out_path = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "docs" / "ml-feasibility.md"
     rows = []
 

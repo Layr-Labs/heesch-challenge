@@ -26,6 +26,14 @@ def main(argv=None) -> int:
         help="also run the #PROOF block through the same ProofCarryingGate the harness uses "
              "(checkers from $HEESCH_CHECKER_DIR or ./tools/bin); exit 0 only if VERIFIED",
     )
+    ap.add_argument(
+        "--band",
+        choices=("harness", "encoder", "none"),
+        default="harness",
+        help="with --check-proof: which (cells, m) band to enforce — `harness` (default; what "
+             "the benchmark job enforces), `encoder` (the encoder's measured feasibility band), "
+             "or `none` (out-of-band maintainer re-check, architecture §13.9: no band at all)",
+    )
     args = ap.parse_args(argv)
 
     try:
@@ -72,7 +80,7 @@ def main(argv=None) -> int:
         import os
         import pathlib
 
-        from .proofgate import ProofCarryingGate
+        from .proofgate import ProofCarryingGate, named_band
 
         sub = outcome.submission
         if sub.proof is None:
@@ -82,9 +90,11 @@ def main(argv=None) -> int:
         checker_dir = pathlib.Path(
             os.environ.get("HEESCH_CHECKER_DIR") or (pathlib.Path.cwd() / "tools" / "bin")
         )
-        verdict = ProofCarryingGate(shape_path.parent, checker_dir).check(sub, outcome)
+        verdict = ProofCarryingGate(shape_path.parent, checker_dir,
+                                    band=named_band(args.band)).check(sub, outcome)
         out = outcome.result.to_json()
         out["proof"] = verdict.to_json()
+        out["proof"]["band"] = args.band
         print(json.dumps(out, sort_keys=True, separators=(",", ":")))
         return 0 if verdict.code is None else 1
 

@@ -441,11 +441,13 @@ A `record_eligible` entry (proof-backed, `hc_verified >= 5`; `record_exact`
 when the value is also pinned) is a machine-checked research claim. Two
 ways it can arise:
 
-**In-band.** The submission carries the `F(S, k+1)` proof and the harness
-verifies it inside the benchmark job (bands in §13.3: an `Hc = 5` certificate
-for shapes up to 12 cells is producible and inside the band, but checking it
-needs a runner with ≥ 12 GB RAM for `cake_lpr`'s heap — the standard 8 GB
-runner answers `RESOURCE_EXCEEDED`; `docs/ml-feasibility.md`). The score is
+**In-band.** The submission carries the `F(S, m)` proof, `m >= hh + 1`, and
+the harness verifies it inside the benchmark job (bands in §13.3: an
+`Hc = 5` certificate for shapes up to 12 cells is `F(S, 6)` when `Hh = 5` —
+producible and inside the band, checked in-band when the proof carries a
+core list (§13.3 5b); without one `cake_lpr` needs ≥ 12 GB for the full CNF
+and the 8 GB runner answers `RESOURCE_EXCEEDED` — but `F(S, 7)` when
+`Hh = 6`, which is out of band; `docs/ml-feasibility.md`). The score is
 recorded like any other; the `record_eligible` / `record_exact` flags are
 set from the metrics.
 
@@ -456,14 +458,19 @@ with `hc_verified` as deep as they can prove, and file the proof (or the
 request to produce one) with the maintainers, who:
 
 1. regenerate `F(S, m)` with the frozen encoder revision named in the
-   `#PROOF` block, on a machine without the job's memory/time caps
-   (`encode_multilevel_stream`, then `check_proof_v2` at record tier with the
-   real `cake_lpr`; the exact same code path, only the caps differ);
-2. record the outcome — CNF digest, proof sha256, checker verdicts and
-   versions — in `docs/records/` next to the shape and witness, and, if
-   VERIFIED, promote the entry with `non_tiler_evidence=proof` by re-running
-   the harness with the widened band pinned for that submission (the score
-   itself is the ordinary `hc_verified + defect` scalar);
+   `#PROOF` block, on a machine without the job's memory/time caps, with the
+   exact same code path and only the band relaxed:
+   `python -m heesch_verify submission/best.heesch --check-proof --band encoder`
+   (the encoder's measured feasibility band) or `--band none` (no band at
+   all, e.g. `F(S, 7)` for an `Hc = 5, Hh = 6` candidate); participants
+   produce such a proof with `tools/prove.py … --m 7 --band none`. The
+   harness itself has no band switch — the strict band is structural;
+2. record the outcome — the verdict JSON (which names the band used), CNF
+   digest, proof sha256, checker verdicts and versions — in `docs/records/`
+   next to the shape and witness, and, if VERIFIED, promote the entry with
+   `non_tiler_evidence=proof` by hand (the score itself is the ordinary
+   `hc_verified + defect` scalar; the in-harness run of that submission stays
+   `RESOURCE_EXCEEDED` until step 3);
 3. widen the in-band limits for everyone once the measurement shows the new
    size/depth fits the job (a policy change, not a new encoder revision).
 

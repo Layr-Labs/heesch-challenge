@@ -55,9 +55,11 @@ _CHUNK = 1024 * 1024
 # its two heaviest cells ((50, 4) and (200, 2)), because the harness must
 # ENCODE F(S, m) inside the benchmark job as well as check it. (<= 20, 5)
 # admits the exactness proof of every known Hc = 4 shape (11-20 cells);
-# (<= 12, 6) admits an Hc = 5 certificate for a shape up to 12 cells
-# (measured: F(S,6) of the 11-hex — 112 s encode at 2.5 GB RSS, drat-trim
-# 61 s, lrat-check 16 s on the 513 MB LRAT). See docs/ml-feasibility.md.
+# (<= 12, 6) admits an Hc = 5 certificate for a shape up to 12 cells WHEN
+# Hh = 5 (measured: F(S,6) of the 11-hex — 112 s encode at 2.5 GB RSS,
+# drat-trim 61 s, lrat-check 16 s on the 513 MB LRAT); an Hc = 5 shape with
+# Hh = 6 needs F(S,7), which is out of band (§13.9, `band=` below). See
+# docs/ml-feasibility.md.
 HARNESS_PROOF_BAND = ((12, 6), (20, 5), (50, 3), (100, 2))
 # Wall-clock guard around the in-process ENCODING step only (pipeline passes
 # it to heesch_encoder.proofcheck.guard); the checkers are bounded separately
@@ -71,11 +73,38 @@ ENCODE_TIMEOUT_S = 600
 CHECKER_NAMES = ("drat-trim", "lrat-check", "cake_lpr")
 
 
-def in_harness_band(n_cells: int, m: int) -> bool:
-    for max_cells, max_m in HARNESS_PROOF_BAND:
+def in_band(band, n_cells: int, m: int) -> bool:
+    """True iff (n_cells, m) is inside `band` = ((max_cells, max_m), ...)
+    ascending in max_cells (first matching row decides)."""
+    for max_cells, max_m in band:
         if n_cells <= max_cells:
             return 1 <= m <= max_m
     return False
+
+
+def in_harness_band(n_cells: int, m: int) -> bool:
+    return in_band(HARNESS_PROOF_BAND, n_cells, m)
+
+
+# Named bands for the out-of-band record procedure (architecture §13.9):
+# `harness` is what the benchmark job enforces; `encoder` is the encoder's own
+# measured feasibility band (what the pipeline will ENCODE at all); `none`
+# disables the gate-side band AND the pipeline's feasibility check, for a
+# maintainer re-check on a machine without the job's caps. The harness never
+# selects anything but `harness` (no env var, no config) — the strict default
+# is structural.
+BAND_CHOICES = ("harness", "encoder", "none")
+
+
+def named_band(name: str):
+    if name == "harness":
+        return HARNESS_PROOF_BAND
+    if name == "encoder":
+        from heesch_encoder.multilevel.api import feasibility_band
+        return feasibility_band()
+    if name == "none":
+        return None
+    raise ValueError(f"unknown band {name!r}; choose one of {BAND_CHOICES}")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -201,10 +230,14 @@ class ProofCarryingGate:
     holds best.heesch and the proof file it names; `checker_dir` holds the
     vendored checker binaries."""
 
-    def __init__(self, submission_dir, checker_dir, budget=None):
+    def __init__(self, submission_dir, checker_dir, budget=None, band=HARNESS_PROOF_BAND):
         self.submission_dir = pathlib.Path(submission_dir)
         self.checker_dir = pathlib.Path(checker_dir)
         self.budget = budget
+        # (cells, max m) rows the gate admits; None = no gate band and no
+        # encoder feasibility band either (out-of-band maintainer re-check,
+        # §13.9). The harness always uses the default.
+        self.band = band
 
     def missing_checkers(self) -> list[str]:
         """Names of checkers that are not regular, executable files in
@@ -239,11 +272,12 @@ class ProofCarryingGate:
             )
         # 3. Bands.
         n_cells = len(sub.cells)
-        if not in_harness_band(n_cells, m):
+        if self.band is not None and not in_band(self.band, n_cells, m):
+            which = "in-harness" if self.band == HARNESS_PROOF_BAND else "selected"
             return ProofVerdict(
                 ErrorCode.RESOURCE_EXCEEDED,
-                f"({n_cells} cells, m={m}) is outside the in-harness proof band "
-                f"{HARNESS_PROOF_BAND}",
+                f"({n_cells} cells, m={m}) is outside the {which} proof band "
+                f"{tuple(self.band)}",
                 m=m,
             )
         # 4. Materialize the proof file into scratch.
@@ -295,6 +329,7 @@ class ProofCarryingGate:
                 tier=Tier.RECORD, bin_dir=self.checker_dir, budget=self.budget,
                 core_path=(str(core_dst) if core_dst is not None else None),
                 encode_timeout_s=ENCODE_TIMEOUT_S,
+                enforce_band=self.band is not None,
             )
         finally:
             shutil.rmtree(scratch, ignore_errors=True)

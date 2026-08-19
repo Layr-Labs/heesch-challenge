@@ -194,6 +194,69 @@ def test_out_of_band_rejected(tmp_path):
     assert "band" in v.detail
 
 
+# --- audit 2026-08-19 High 1: out-of-band band selection (architecture §13.9) ---
+
+def _gate_with_band(tmp_path, text, files, band):
+    d = checker_dir_for_tests(tmp_path)
+    if d is None:
+        pytest.skip("tools/bin checkers not built")
+    subdir = tmp_path / "submission"
+    subdir.mkdir(exist_ok=True)
+    for name, data in files:
+        (subdir / name).write_bytes(data)
+    out = verify_witness(text)
+    return ProofCarryingGate(subdir, d, band=band).check(out.submission, out)
+
+
+def test_gate_band_param_narrow_rejects(tmp_path):
+    text = CENSUS_11 + _block(3, "a" * 64, 1, 1, "p.drat", "drat", "none", "b" * 64)
+    v = _gate_with_band(tmp_path, text, [("p.drat", b"0\n")], band=((12, 2),))
+    assert v.code is ErrorCode.RESOURCE_EXCEEDED
+    assert "selected proof band" in v.detail
+
+
+def test_gate_band_none_skips_the_band(tmp_path):
+    """band=None (the `none` choice): m = 8 is past every band, yet the gate
+    proceeds to the next cheap check (payload digest) instead of refusing."""
+    text = CENSUS_11 + _block(8, "a" * 64, 1, 1, "p.drat", "drat", "none", "b" * 64)
+    v = _gate_with_band(tmp_path, text, [("p.drat", b"0\n")], band=None)
+    assert v.code is ErrorCode.PROOF_FILE_DIGEST_MISMATCH
+
+
+def test_named_bands():
+    from heesch_verify.proofgate import HARNESS_PROOF_BAND, named_band
+    from heesch_encoder.multilevel.api import feasibility_band
+    assert named_band("harness") == HARNESS_PROOF_BAND
+    assert named_band("encoder") == feasibility_band()
+    assert named_band("none") is None
+    with pytest.raises(ValueError):
+        named_band("wide")
+
+
+def test_check_proof_v2_enforce_band_false_reaches_the_encoder(tmp_path, monkeypatch):
+    import heesch_encoder.multilevel.api as mlapi
+    from heesch_encoder.proofcheck.pipeline import ProofSubmission, ProofStatus, Tier, check_proof_v2
+
+    called = []
+
+    def fake_encode(*a, **k):
+        called.append(a[3])  # m
+        raise RuntimeError("stop here")
+    monkeypatch.setattr(mlapi, "encode_multilevel_stream", fake_encode)
+    out = verify_witness(CENSUS_11)
+    tile = frozenset(canonical_form(out.submission.cells, out.submission.grid, True))
+    proof = tmp_path / "p.drat"
+    proof.write_bytes(b"0\n")
+    psub = ProofSubmission(str(proof), "0" * 64, 1, 1)
+    # Enforced (default): m = 8 never reaches the encoder.
+    r = check_proof_v2(psub, tile, out.submission.grid, out.contact, 8, Tier.RECORD)
+    assert r.status is ProofStatus.RESOURCE_EXCEEDED and called == []
+    # Out of band: the encoder is invoked at m = 8.
+    with pytest.raises(RuntimeError):
+        check_proof_v2(psub, tile, out.submission.grid, out.contact, 8, Tier.RECORD, enforce_band=False)
+    assert called == [8]
+
+
 def test_wrong_cnf_digest_rejected_before_checkers(tmp_path, unsat_proof):
     text = CENSUS_11 + _block(3, "a" * 64, unsat_proof["enc"].num_vars,
                               unsat_proof["enc"].num_clauses, "p.drat", "drat", "none",
@@ -335,6 +398,15 @@ def test_cli_check_proof_matches_harness(tmp_path, unsat_proof):
     assert proc.returncode == 0, proc.stdout + proc.stderr
     out = json.loads(proc.stdout)
     assert out["proof"]["status"] == "VERIFIED" and out["proof"]["m"] == 3
+    assert out["proof"]["band"] == "harness"
+    # --band encoder / none verify the same proof and record the band used.
+    for band in ("encoder", "none"):
+        proc = subprocess.run([sys.executable, "-m", "heesch_verify", str(sub / "best.heesch"),
+                               "--check-proof", "--band", band],
+                              capture_output=True, text=True, env=env, timeout=600)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        out = json.loads(proc.stdout)
+        assert out["proof"]["status"] == "VERIFIED" and out["proof"]["band"] == band
 
 
 def test_census_shape_plus_exact_proof(tmp_path):
