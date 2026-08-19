@@ -16,6 +16,41 @@ remains open is *external review* of the M1–M9 arguments for revision 2 and a
 citable proof of E7; both gate record *announcements* (architecture §13.9),
 not scoring. Encoder v1 is not used for acceptance.
 
+## External review of M1–M9 — procedure and status
+
+The repository cannot close this obligation by itself; it can only make the
+review cheap, pinned and recordable. Status 2026-08-19: **not yet reviewed
+externally.** Until a review is filed, every record claim is worded as
+*"accepted by the revision-2 verifier and its checked UNSAT proof,
+conditional on the stated encoder soundness obligations (M1/M2/M4/M5/M9)"*
+(architecture §13.9; `docs/STATUS.md`).
+
+What a reviewer is asked to confirm, for encoder revision 2 (commit pinned
+in the review file):
+
+| Obligation | Claim to confirm | Where the argument lives | Mechanical evidence |
+|---|---|---|---|
+| M1 | the reachability-BFS universe of level `l` contains every placement that can occur at level `l` in ANY hole-permitted `m`-corona configuration of `S` | multilevel spec §4.2 | `tests/encoder/test_ml_universe_m1.py` (brute force + margin-band saturation) |
+| M2 | every real hole-permitted `m`-corona (true levels) is a weak configuration in the sense of spec §2.1 (relaxation only weakens) | multilevel spec §2.1–§2.2 | exercised by M4 on oracle-generated coronas |
+| M4 | every weak configuration extends to a satisfying assignment of `F(S, m)` under the canonical auxiliary extension | multilevel spec §5 (families 1, 2, 4, 5, 6) | `tests/encoder/test_ml_roundtrip.py::test_m4_*` |
+| M5 | the Sinz at-most-one auxiliaries are functionally determined, so satisfiability is preserved under projection onto the `x` variables | cnf spec §7 E2, multilevel spec §8 | `tests/encoder/test_amo_dimacs.py` |
+| M9 | the regenerated CNF is exactly the frozen formula (emission order, literal order, DIMACS profile, digest) | multilevel spec §6, §11 | `tests/encoder/test_ml_determinism.py`, `test_revision_freeze.py` |
+
+The reviewer gets: this note, the two encoder specs, `heesch_encoder/`
+(the universe BFS `multilevel/universe.py`, clause families
+`multilevel/clauses.py`, AMO `amo.py`), the corpus (`tests/corpus/`) and
+the 46/46 exact-case cross-check (`docs/ml-weak-gap.md`). They do NOT need
+to trust the tests: the claims are about the mathematics of §2–§5.
+
+Recording the outcome: a file `docs/reviews/<YYYY-MM-DD>-<reviewer>.md`
+stating the commit and encoder revision reviewed, one verdict line per
+obligation (confirmed / confirmed-with-conditions / gap found), the argument
+text or a pointer to it, and the reviewer's affiliation. A "gap found" on
+M1/M2/M4 is a revision-3 event (new manifest, re-verification of every
+record-tier proof); M5/M9 gaps are implementation fixes. Once M1/M2/M4/M5/M9
+are confirmed, the conditional wording is dropped from §13.9, `STATUS.md`
+and the README in the same commit that files the review.
+
 ## Theorem v1 (single-level; sound for exactness only at k = 0)
 
 Let `S` be a hole-free tile, `P_k` a verified hole-free patch with coronas

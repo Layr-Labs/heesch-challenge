@@ -4,7 +4,8 @@ A living document: what the verifier does today (the true values, kept in
 step with the code) and where every external-audit finding stands. Update
 the relevant row in the same commit that changes the behaviour.
 
-Last updated: 2026-08-19 (Plan 1 of the 2026-08-19 audit response).
+Last updated: 2026-08-19 (Plans 1 and 2 of the 2026-08-19 audit response
+landed; formal response: `docs/audits/2026-08-19-update-audit-response.md`).
 
 ## 1. Current implementation (one screen)
 
@@ -84,13 +85,13 @@ Status values: FIXED `<commit>` · OPEN · PLAN 2 · ACCEPTED (with reason).
 | M7 | Non-executable checker passes preflight then crashes | Medium | FIXED `db45315` | `checkers.checker_problem` (regular + `X_OK`) used by preflight and `_run`; spawn `OSError` → `CHECKER_MISSING` | `tests/encoder/test_checker_verdicts.py::test_non_executable_checker_*`, `::test_directory_named_like_a_checker_*`, `::test_spawn_oserror_is_missing`, `tests/test_proof_gate.py::test_non_executable_checkers_reject_closed` |
 | M8 | README miscounts the `Hc = 4` polyhexes (five → six; 17-hex omitted) | Medium | FIXED `05b055a` (verified against Kaplan's Table `tab:hnh`: sizes 11, 13, 15, 15, 16, 17) | `README.md` | — |
 | M9 | "Essentially unexplored" band started at the census cutoff, not the exhaustive-search cutoff | Medium | FIXED `05b055a` | `README.md` (embedded census ≤ 10/8/12 vs published exhaustive ≤ 19/17/24) | — |
-| L10 | Proof-size caps disagree (256 MiB in docs vs 1 GiB in code) | Low | PLAN 2 (architecture §13.3 step 4 already says 1 GiB; README:91, §14, THREAT-MODEL C7 still 256 MiB) | — | — |
+| L10 | Proof-size caps disagree (256 MiB in docs vs 1 GiB in code) | Low | FIXED `33c66f7` (1 GiB everywhere, disk implication stated) | `README.md`, `docs/THREAT-MODEL.md` C7/A-4, architecture §13.3/§14 | — |
 | L11 | README grammar omits the optional `core` line | Low | FIXED `05b055a` | `README.md` | — |
-| L12 | rev-2 manifest records a stale checker policy (`cake_lpr-or-lrat-check`) | Low | PLAN 2 (addendum / rev-3 manifest; rev-2.json is digest-pinned and immutable) | `heesch_encoder/revisions/rev-2.json` | `tests/encoder/test_revision_freeze.py` |
-| L13 | `defect_board_enabled` disagrees with actual scoring | Low | PLAN 2 (decide: drop the flag or make `yukon_score` honour it) | `heesch_verify/witness.py:31`, `heesch_verify/score.py` | — |
-| L14 | Historical response text has stale values (64 MiB; `tier: record`) | Low | PLAN 2 | `docs/audits/2026-08-16-comparative-audit-response.md` | — |
+| L12 | rev-2 manifest records a stale checker policy (`cake_lpr-or-lrat-check`) | Low | FIXED `9a87535` (code-checked `rev-2-addendum.json`; frozen manifest untouched) | `heesch_encoder/revisions/rev-2-addendum.json`, `manifest.load_revision_addendum` | `tests/encoder/test_revision_freeze.py::test_rev2_addendum_matches_code` |
+| L13 | `defect_board_enabled` disagrees with actual scoring | Low | FIXED `33c66f7` (flag live, on by default; `yukon_score` + board keys honour it) | `heesch_verify/witness.py`, `heesch_verify/score.py`, `heesch_verify/result.py`, architecture §9.2.8/§15 | `tests/test_score_store.py::test_defect_enabled_flag_gates_the_fraction`, `tests/test_harness.py::test_defect_block_scores_gradient` |
+| L14 | Historical response text has stale values (64 MiB; `tier: record`) | Low | FIXED `33c66f7` (corrected in place, dated) | `docs/audits/2026-08-16-comparative-audit-response.md` | — |
 | L15 | CakeML heap comment (70 %) vs code (85 %) | Low | FIXED `db45315` (comment now says 85 %, clamped to [1, 12] GB) | `heesch_encoder/proofcheck/checkers.py` | — |
-| TB | Encoder soundness (M1/M2/M4/M5/M9) needs independent mathematical review | Trust boundary | OPEN — external review; until then every record claim carries the conditional wording in §1 | `docs/soundness-note.md`, multilevel spec §M1–M9 | round-trip + 46/46 exact-case tests (empirical) |
+| TB | Encoder soundness (M1/M2/M4/M5/M9) needs independent mathematical review | Trust boundary | OPEN — external review; procedure, reviewer brief and filing format recorded (`docs/soundness-note.md`, `docs/reviews/`); until a review is filed every record claim carries the conditional wording in §1 | `docs/soundness-note.md`, `docs/reviews/README.md`, multilevel spec §8 | round-trip + 46/46 exact-case tests (empirical) |
 
 ## 3. Audit tracker — 2026-08-16 comparative audit
 
@@ -108,22 +109,21 @@ and found no false-acceptance route.
   4 GB DIMACS, `cake_lpr` on the core CNF) before `(12, 7)` can enter the
   in-harness band (architecture §13.9 step 3).
 
-## 5. Plan 2 queue
+## 5. Plan 2 — done 2026-08-19
 
-1. L10 size-cap wording (one value everywhere; document disk/time implications
-   of 1 GiB).
-2. L12 rev-2 manifest addendum (rev-3.json or a signed addendum file; do not
-   edit the frozen manifest).
-3. L13 `defect_board_enabled`: remove the dead flag or make scoring honour it;
-   update architecture §9.2.8.
-4. L14 stale values in the 2026-08-16 response doc.
-5. `docs/audits/2026-08-19-update-audit-response.md` (formal response in the
-   house format, pointing at this tracker).
-6. External soundness review process for M1/M2/M4/M5/M9 (who, what artefacts,
-   how the result is recorded in `docs/soundness-note.md`).
-7. Portable encode guard (deadline checks between levels inside
-   `encode_multilevel_stream`) so Windows / non-main-thread callers get the
-   same RESOURCE_EXCEEDED instead of relying on the budget backstop.
+1. L10 size-cap wording — `33c66f7`.
+2. L12 rev-2 manifest addendum — `9a87535`.
+3. L13 `defect_board_enabled` live and honoured by scoring — `33c66f7`.
+4. L14 stale values in the 2026-08-16 response — `33c66f7`.
+5. `docs/audits/2026-08-19-update-audit-response.md` — this round.
+6. External soundness review: procedure + filing format in
+   `docs/soundness-note.md` and `docs/reviews/` (the review itself is
+   external and still OPEN — see TB above).
+7. Portable encode guard (monotonic deadline inside
+   `encode_multilevel_stream`) — `4eb3532`.
+
+Remaining after Plan 2: the external review (TB) and the runner timing of
+`F(S,7)` (§4) — both are actions outside the repository.
 
 ## 6. How to verify
 
