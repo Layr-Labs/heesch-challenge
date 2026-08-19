@@ -133,8 +133,10 @@ def mem_available_bytes() -> int | None:
 
 
 def scratch_free_bytes(path=None) -> int | None:
+    import tempfile
+
     try:
-        return shutil.disk_usage(path or os.environ.get("TMPDIR") or "/tmp").free
+        return shutil.disk_usage(path or os.environ.get("TMPDIR") or tempfile.gettempdir()).free
     except OSError:
         return None
 
