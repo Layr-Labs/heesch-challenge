@@ -447,7 +447,8 @@ the harness verifies it inside the benchmark job (bands in §13.3: an
 producible and inside the band, checked in-band when the proof carries a
 core list (§13.3 5b); without one `cake_lpr` needs ≥ 12 GB for the full CNF
 and the 8 GB runner answers `RESOURCE_EXCEEDED` — but `F(S, 7)` when
-`Hh = 6`, which is out of band; `docs/ml-feasibility.md`). The score is
+`Hh = 6`, which is inside the encoder band and outside the in-harness band
+as of 2026-08-19; `docs/ml-feasibility.md`). The score is
 recorded like any other; the `record_eligible` / `record_exact` flags are
 set from the metrics.
 
@@ -462,8 +463,8 @@ request to produce one) with the maintainers, who:
    exact same code path and only the band relaxed:
    `python -m heesch_verify submission/best.heesch --check-proof --band encoder`
    (the encoder's measured feasibility band) or `--band none` (no band at
-   all, e.g. `F(S, 7)` for an `Hc = 5, Hh = 6` candidate); participants
-   produce such a proof with `tools/prove.py … --m 7 --band none`. The
+   all); participants produce an `F(S, 7)` proof for an `Hc = 5, Hh = 6`
+   candidate with `tools/prove.py … --m 7 --band encoder`. The
    harness itself has no band switch — the strict band is structural;
 2. record the outcome — the verdict JSON (which names the band used), CNF
    digest, proof sha256, checker verdicts and versions — in `docs/records/`

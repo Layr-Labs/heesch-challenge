@@ -10,11 +10,19 @@ vendored drat-trim), computes the digests and rewrites the `#PROOF` block.
     python tools/prove.py submission/best.heesch                # m = hh + 1, LRAT, xz
     python tools/prove.py submission/best.heesch --m 3
     python tools/prove.py submission/best.heesch --format drat --no-xz --check
+    python tools/prove.py submission/best.heesch --m 7 --band none   # out-of-band (§13.9)
 
 Requires the `prove` extra (`pip install -e '.[prove]'`, i.e. python-sat).
 Exit codes: 0 proof written; 2 F(S, m) is SATISFIABLE (no proof exists at
 this m — either the shape has a deeper corona than your witness shows or it
 is a tiler); 1 any other failure.
+
+Safety: `--out` is a plain basename validated BEFORE any work (never
+best.heesch, no directories, suffix must match the format); existing outputs
+are not overwritten without `--force`; every intermediate lives in a private
+`.prove-*` temp dir next to the shape that is removed on every exit path; the
+proof, core and rewritten shape file are installed atomically only after the
+new `#PROOF` block has been parsed back successfully.
 
 `--check` runs the finished submission through the same ProofCarryingGate the
 harness uses (checkers from $HEESCH_CHECKER_DIR or ./tools/bin; cake_lpr is

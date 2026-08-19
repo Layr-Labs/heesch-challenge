@@ -160,10 +160,12 @@ Heesch number.
   core clauses (see `docs/heesch-verifier-architecture.md` §13.3 5b; without
   a core list the formally-verified checker needs > 6 GB and the standard
   8 GB runner answers `RESOURCE_EXCEEDED`) — but `F(S,7)` when `Hh = 6`
-  (`Hc ∈ {Hh − 1, Hh}`), which is out of band: submit the witness anyway,
-  produce the proof with `tools/prove.py … --m 7 --band none`, and file it
-  for the out-of-band record procedure (§13.9; `python -m heesch_verify
-  --check-proof --band none` is the maintainers' re-check);
+  (`Hc ∈ {Hh − 1, Hh}`), which is inside the encoder band (measured: ~3 min
+  to encode, ~4 min to solve, 21 MB xz core LRAT + core list) but outside the
+  in-harness band: submit the witness anyway, produce the proof with
+  `tools/prove.py … --m 7 --band encoder`, and file it for the out-of-band
+  record procedure (§13.9; `python -m heesch_verify --check-proof --band
+  encoder` is the maintainers' re-check);
   a proof block that is present but broken rejects even a census shape.
   `m = hh + 1` makes the value exact; larger `m` certifies non-tilerhood
   with the lower bound only.

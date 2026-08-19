@@ -57,7 +57,14 @@ def regenerate_and_match_v2(claimed_digest: str, tile_cells, grid: Grid,
 # 2026-08-18: (<= 12, 6) added after measuring F(S,6) for the 11-hex Hc=4
 # shape with the streaming encoder: 112 s encode, 2.5 GB RSS, 17.2 M
 # clauses; UNSAT in 157 s; LRAT 513 MB (25 MB xz). See docs/ml-feasibility.md.
-FEASIBILITY_BAND = ((12, 6), (20, 5), (50, 4), (100, 3), (200, 2))
+# 2026-08-19: (<= 12, 7) — the certificate an Hc = 5 shape with Hh = 6 needs
+# (audit 2026-08-19 High 1) — after measuring F(S,7) for the same 11-hex:
+# 187 s encode, 3.1 GB RSS, 36.5 M clauses / 3.97 GB DIMACS; UNSAT in 227 s;
+# drat-trim 89 s, LRAT 0.73 GB; core 680 k clauses (1.9 %), core LRAT 358 MB
+# (18 MB xz). Encodable and checkable with a core list on a workstation; the
+# in-harness band stays at (12, 6) until the same cycle is timed on the
+# benchmark runner (docs/ml-feasibility.md, architecture §13.9 step 3).
+FEASIBILITY_BAND = ((12, 7), (20, 5), (50, 4), (100, 3), (200, 2))
 
 
 def feasibility_band() -> tuple[tuple[int, int], ...]:

@@ -112,8 +112,9 @@ Counts from universes alone — no clause objects. DNF = row budget (120s) or me
 The harness must *encode* `F(S, m)` inside the benchmark job before it can
 check a proof, so `heesch_verify.proofgate.HARNESS_PROOF_BAND` is the
 encoder's feasibility band (`heesch_encoder.multilevel.api.FEASIBILITY_BAND`)
-minus its two heaviest cells: `(<= 12 cells, m <= 6)`, `(<= 20, m <= 5)`,
-`(<= 50, m <= 3)`, `(<= 100, m <= 2)`. Real timings (Apple M-series
+minus its heaviest cells: `(<= 12 cells, m <= 6)`, `(<= 20, m <= 5)`,
+`(<= 50, m <= 3)`, `(<= 100, m <= 2)` (the encoder band is `(12, 7)`,
+`(20, 5)`, `(50, 4)`, `(100, 3)`, `(200, 2)`). Real timings (Apple M-series
 laptop, single core), streamed encoder:
 
 | shape | cells | m | vars | clauses | encode s | DIMACS | peak RSS |
@@ -127,6 +128,7 @@ laptop, single core), streamed encoder:
 | Kaplan Hc=4 11-hex | 11 | 5 | 561 357 | 6 867 895 | 60 | 0.99 GB | |
 | Kaplan Hc=4 20-iamond | 20 | 5 | 1 272 828 | 11 038 715 | 173 | 2.05 GB | |
 | Kaplan Hc=4 11-hex | 11 | 6 | 948 747 | 17 237 371 | 112 | 2.13 GB | 2.5 GB (was 14.6 GB before streaming) |
+| Kaplan Hc=4 11-hex | 11 | 7 | 1 478 547 | 36 506 101 | 187 | 3.97 GB | 3.1 GB |
 
 Full record-scale cycle for the 11-hex `F(S,6)` (the size of an Hc = 5
 certificate for a shape of that size **when Hh = 5**; an Hc = 5 shape with
@@ -148,3 +150,35 @@ cake_lpr 900 s, lrat-check 300 s; 1500 s overall for the whole proof stage,
 of which the encoder may take at most the first 600 s — the encode guard
 covers the encoder call only, architecture §13.5); an honest proof that does
 not fit is `RESOURCE_EXCEEDED`, never scored and never silently accepted.
+
+### F(S,7) — the `Hc = 5, Hh = 6` certificate (measured 2026-08-19)
+
+`Hc ∈ {Hh − 1, Hh}`, so a genuine `Hc = 5` shape may have a real
+hole-permitted 6-corona; then `F(S,6)` is SAT and the finite certificate must
+be `F(S,7)` (audit 2026-08-19 High 1). Full cycle for the Kaplan `Hc = 4`
+11-hex (`tools/ml_feasibility.py --shape hex11-kaplan-hc4hh4 --m 7` for the
+counts; same laptop, single core):
+
+| step | result |
+|---|---|
+| encode (streamed) | 1 478 547 vars, 36 506 101 clauses, 3.97 GB DIMACS, **187 s**, 3.1 GB RSS |
+| solve (cadical153, proof logging, `tools/prove.py` worker) | UNSAT in **227 s**, DRAT 2.99 GB |
+| drat-trim verify + LRAT | `s VERIFIED` in 89 s, LRAT 0.73 GB (28 MB xz) |
+| lrat-check on the full LRAT | `c VERIFIED` in 28 s |
+| core extraction (`make_core_lrat`) | 679 920 of 36 506 101 clauses (1.9 %), core.txt 87 MB (3 MB xz), core LRAT 358 MB (**18 MB xz**), 111 s |
+| lrat-check on the core | `c VERIFIED` in 3 s |
+
+So an `F(S,7)` proof for a ≤ 12-cell shape is producible on a laptop in
+about 13 minutes (`tools/prove.py … --m 7 --band encoder`), its submitted
+payload (core LRAT + core list) is 21 MB xz / 445 MB raw — inside the 48 MiB
+stored / 1 GiB payload caps — and the core-relative check is seconds. On the
+strength of these numbers `(<= 12, 7)` was added to the **encoder**
+feasibility band (2026-08-19). The **in-harness** band stays at `(<= 12, 6)`
+until the same cycle is timed on the benchmark runner (the laptop encode is
+187 s against the 600 s encode guard; a 2-vCPU runner is roughly 2–3× slower
+and the job's scratch must hold the 4 GB DIMACS): until then an `Hc = 5,
+Hh = 6` candidate goes through the out-of-band record procedure
+(architecture §13.9, `--band encoder`). Participant-side note: the pysat
+worker holds the DRAT in memory before writing it (peak ~27 GB across the
+cycle for this instance); a solver binary with file-based proof logging
+avoids that.

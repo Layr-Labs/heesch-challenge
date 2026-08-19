@@ -173,8 +173,10 @@ rectangle 1.45 M vars at `m = 3`, 6.7 M at `m = 5`; a 100-cell square DNF at
 `heesch_encoder.multilevel.api.FEASIBILITY_BAND` (measured policy — it
 changes no CNF byte, so widening it is not a new revision; the revision-2
 manifest carries the 2026-08-07 measurement as history):
-`(<= 12 cells, m <= 6)`, `(<= 20, m <= 5)`, `(<= 50, m <= 4)`,
-`(<= 100, m <= 3)`, `(<= 200, m <= 2)`.
+`(<= 12 cells, m <= 7)`, `(<= 20, m <= 5)`, `(<= 50, m <= 4)`,
+`(<= 100, m <= 3)`, `(<= 200, m <= 2)` (`(12, 7)` added 2026-08-19 after the
+`F(S,7)` measurement in docs/ml-feasibility.md — the `Hc = 5, Hh = 6`
+certificate; §10.2a).
 `check_proof_v2` answers `RESOURCE_EXCEEDED` **before encoding** outside it
 (`in_feasibility_band`), and encodes by streaming to disk
 (`encode_multilevel_stream`, byte-identical to `encode_multilevel`) so peak
@@ -204,8 +206,9 @@ procedure applies (architecture §13.9).
 The record flag does not require exactness (architecture §2.3): a verified
 `hc >= 5` plus ANY checked `F(S, m)` UNSAT is record-breaking. But the level
 rule `m >= hh_verified + 1` means a candidate whose witness shows a real
-hole-permitted 6-corona can only be certified by `F(S, 7)`, which is outside
-both bands as measured (`docs/ml-feasibility.md`, "F(S,7)" rows). The code
+hole-permitted 6-corona can only be certified by `F(S, 7)`, which is inside
+the encoder band since 2026-08-19 but outside the in-harness band
+(`docs/ml-feasibility.md`, "F(S,7)"). The code
 therefore exposes the band as a parameter instead of a constant:
 `ProofCarryingGate(..., band=...)`, `check_proof_v2(..., enforce_band=False)`,
 `python -m heesch_verify --check-proof --band {harness,encoder,none}` and
