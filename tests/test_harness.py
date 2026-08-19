@@ -129,6 +129,8 @@ def test_defect_block_scores_gradient(tmp_path):
     assert score["score"] == 1.0
     assert score["metrics"]["defect_required"] == len(R)
     assert "defect_achieved" in score["metrics"]["verified_claim"]
+    # The emitted flag agrees with the scoring rule (audit 2026-08-19 Low 13).
+    assert score["metrics"]["defect_enabled"] is True
 
 
 def test_p0_monohex_tiler_rejected(tmp_path):

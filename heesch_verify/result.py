@@ -104,8 +104,9 @@ class Result:
     hc_claimed: int = 0
     hh_claimed: int = 0
     # Defect fields (§9.2.8) — recorded on every submission regardless of the
-    # board flag, so enabling the board later needs no re-verification.
-    defect_enabled: bool = False
+    # board flag, so toggling the board needs no re-verification; the flag
+    # decides whether the defect fraction enters the score / ranking.
+    defect_enabled: bool = True    # scoring honours it (score.yukon_score, board keys)
     defect_block_present: bool = False
     defect_corona_level: int = 0
     defect_hc: int = 0

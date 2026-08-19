@@ -263,7 +263,9 @@ only.
 9.2.6 The scalar `score = hc_verified + min(1 - defect/required, 0.999999)`
 is not a Heesch number and must never be rendered as one; `hc_verified` is.
 9.2.7 The `#DEFECT` block grammar is §4; `--emit-epoch` strips it.
-9.2.8 Recorded on every submission regardless of the board flag:
+9.2.8 Recorded on every submission regardless of the board flag
+(`defect_enabled`, on by default; when off the scalar is `hc_verified` alone
+and the boards rank a defect block as absent):
 `defect_enabled`, `defect_block_present`, `defect_corona_level`, `defect_hc`,
 `defect_hh`, `defect_required`, `defect_pocket_cells`, `defect_partial_tiles`,
 plus `score_fraction_num/den` in metrics.
@@ -485,7 +487,8 @@ proof and digests. None of this alters the score.
 
 Shape ≤ 200 cells, `span_x + span_y <= 29`; ≤ 20 000 placements per patch;
 ≤ 64 corona levels; corona work budget 8 000 000 cell·levels; shape file
-≤ 2 MiB, proof file ≤ 48 MiB stored / 256 MiB decompressed; boundary-word
+≤ 2 MiB, proof file ≤ 48 MiB stored / 1 GiB decompressed
+(`PROOF_MAX_PAYLOAD_BYTES`, on scratch disk); boundary-word
 caps 410 (square) / 810 (hex, iamond) edges — above the longest legal
 boundary; checker budgets §13.5; benchmark job 30 min. Bounds are not frozen
 conventions: raising one is not a new revision, but every accepted result stays
@@ -495,8 +498,10 @@ valid.
 
 Recorded, not hidden: (1) the 6-hex divergence (§6); (2) whether the
 Hh board should be its own track; (3) whether defect-board ranking should be
-enabled on the public board (`defect_board_enabled=False` today; the fields
-are always recorded); (4) proof feasibility above ~50 cells / m > 2 — the
+enabled on the public board — resolved 2026-08-19: it is
+(`VerifyConfig.defect_board_enabled=True`; `yukon_score` and the board keys
+honour `Result.defect_enabled`, so the emitted flag and the scalar agree; the
+fields are always recorded either way); (4) proof feasibility above ~50 cells / m > 2 — the
 enforced band is the measured one and is widened as measurements allow — a
 policy change, not a new encoder revision; (5) replacing census evidence with
 maintainer-generated checked proofs for the small shapes (feasible: F(S,2)/

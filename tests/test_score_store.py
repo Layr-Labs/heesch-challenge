@@ -123,3 +123,17 @@ def test_journal_appends(tmp_path):
     store.put(mk(digest="j1", dhc=1), "bob", "t1")
     lines = p.read_text().strip().split("\n")
     assert len(lines) == 2
+
+
+def test_defect_enabled_flag_gates_the_fraction():
+    """Audit 2026-08-19 Low 13: the emitted `defect_enabled` and the score
+    agree — with the flag off, defect credit enters neither the scalar nor
+    the ranking."""
+    from dataclasses import replace
+    on = mk(hc=2, dhc=5, req=20)
+    off = replace(on, defect_enabled=False)
+    assert on.defect_enabled is True
+    assert yukon_score(on) > 2.0
+    assert yukon_score(off) == 2.0
+    assert hc_board_key(off) < hc_board_key(on)
+    assert hc_board_key(off) == hc_board_key(replace(on, defect_block_present=False))

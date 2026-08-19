@@ -28,7 +28,11 @@ class VerifyConfig:
     max_span_sum: int = 29
     max_placements: int = 20_000
     strict_claims: bool = False       # True: claim mismatch is a rejection
-    defect_board_enabled: bool = False
+    # Defect credit (§9.2.6) is part of the public score: the flag is live —
+    # yukon_score and the board keys consult Result.defect_enabled — and on
+    # by default (audit 2026-08-19 Low 13: the emitted `defect_enabled` must
+    # agree with what the scalar contains).
+    defect_board_enabled: bool = True
 
     def conventions(self) -> dict:
         return {

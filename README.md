@@ -95,8 +95,9 @@ core <basename> <none|xz> <payload_sha256> <num_clauses>   # optional, lrat only
 
 `P = 1` when `hh == hc`; `P = 2` when `hh == hc + 1` (second patch may have
 holes in its outermost corona). Limits: ≤ 200 cells, `span_x + span_y ≤ 29`,
-≤ 20 000 placements per patch; proof file ≤ 48 MiB stored / 256 MiB
-decompressed. `heesch_verify` CLI: `python -m heesch_verify
+≤ 20 000 placements per patch; proof file ≤ 48 MiB stored / 1 GiB
+decompressed (it lands on scratch disk, never in memory; the core LRAT of a
+record-scale proof is ~0.4 GB raw / ~20 MB xz). `heesch_verify` CLI: `python -m heesch_verify
 submission/best.heesch` (`--check-proof` also runs the proof gate;
 `--emit-epoch out.txt` writes an Epoch-compatible copy with both optional
 blocks stripped).

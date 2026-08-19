@@ -72,7 +72,8 @@ and the proof path **enforced**:
   installed package (would have made every proof `CHECKER_UNAVAILABLE`) is
   fixed by threading `bin_dir`. `tools/prove.py` produces the proof and the
   block; `python -m heesch_verify --check-proof` runs the same gate.
-  `benchmark.json maxSubmissionBytes` = 64 MiB. Score metrics record
+  `benchmark.json maxSubmissionBytes` = 64 MiB (raised to 128 MiB in
+  `4f2634b`, 2026-08-18, for record-scale proofs). Score metrics record
   `proof_m`, `proof_cnf_digest`, `proof_sha256`, `proof_checkers`, `tier`,
   `hh_exact`, `exact`, `record_eligible`.
 - **Tests:** `tests/test_parse_proof.py` (38 grammar cases),
@@ -220,5 +221,7 @@ Harness on the audit's tiler (`0 0 … 0 6 1 0 1 3`, hc = 1 witness):
 `REJECTED: GATE_IS_TILER: shape tiles the plane (tiler:census)`. Harness on
 an 11-omino Kaplan non-tiler without a proof: `REJECTED: GATE_INCONCLUSIVE`;
 with the `#PROOF` block written by `tools/prove.py --m 3`: `score 1.0`,
-`non_tiler_evidence: proof`, `tier: record`. Baseline (7-omino, census):
+`non_tiler_evidence: proof`, `tier: lower_bound` (the schema values are
+`lower_bound` | `exact_proof`; an earlier draft of this line said `tier:
+record`, corrected 2026-08-19). Baseline (7-omino, census):
 `score 1.0`, `non_tiler_evidence: census`, `exact: true`.
