@@ -4,8 +4,8 @@ A living document: what the verifier does today (the true values, kept in
 step with the code) and where every external-audit finding stands. Update
 the relevant row in the same commit that changes the behaviour.
 
-Last updated: 2026-08-19 (Plans 1 and 2 of the 2026-08-19 audit response
-landed; formal response: `docs/audits/2026-08-19-update-audit-response.md`).
+Last updated: 2026-08-19 (Plans 1–3; Plan 3 = record path in-harness.
+Formal audit response: `docs/audits/2026-08-19-update-audit-response.md`).
 
 ## 1. Current implementation (one screen)
 
