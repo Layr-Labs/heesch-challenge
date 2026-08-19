@@ -186,10 +186,12 @@ def check_proof_v2(sub: ProofSubmission, tile_cells, grid, contact, m: int,
     # not the formula (F(S,6) of an 11-cell shape is 17M clauses / 2 GB, and
     # materialising it took ~15 GB).
     with tempfile.TemporaryDirectory(prefix="heesch-cnf-") as td:
+        deadline = None if limit == math.inf else time.monotonic() + limit
         try:
             with wall_clock_guard(limit):
                 enc = encode_multilevel_stream(tile_cells, grid, contact, m,
-                                               os.path.join(td, "regenerated.cnf"))
+                                               os.path.join(td, "regenerated.cnf"),
+                                               deadline=deadline)
         except EncodeTimeout:
             return ProofOutcome(
                 ProofStatus.RESOURCE_EXCEEDED,

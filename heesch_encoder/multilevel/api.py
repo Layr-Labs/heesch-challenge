@@ -109,17 +109,24 @@ class MLStreamedEncoding:
 
 
 def encode_multilevel_stream(tile_cells, grid: Grid, contact: Contact, m: int,
-                             out_path, amo_threshold: int = AMO_THRESHOLD) -> MLStreamedEncoding:
+                             out_path, amo_threshold: int = AMO_THRESHOLD,
+                             deadline: float | None = None) -> MLStreamedEncoding:
     """Encode F(S, m) to `out_path` in the frozen DIMACS profile. Two passes
     over the output file (the header needs the final counts): clauses stream
     to `<out_path>.body`, then header + body are concatenated into out_path
-    while the sha256 is computed. Byte-identical to encode_multilevel()."""
+    while the sha256 is computed. Byte-identical to encode_multilevel().
+
+    `deadline` (a time.monotonic() value) is the portable encode guard: the
+    universe BFS checks it between levels and the clause writer every 4096
+    clauses, raising proofcheck.guard.EncodeTimeout — the same exception the
+    SIGALRM guard raises where that is available. It never changes a byte."""
     import hashlib
     import os
 
     from .clauses import MLClauseStream
+    from .universe import _check_deadline
 
-    stream = MLClauseStream(tile_cells, grid, contact, m, amo_threshold)
+    stream = MLClauseStream(tile_cells, grid, contact, m, amo_threshold, deadline=deadline)
     out_path = str(out_path)
     body_path = out_path + ".body"
     empty = False
@@ -136,6 +143,7 @@ def encode_multilevel_stream(tile_cells, grid: Grid, contact: Contact, m: int,
             if n % 4096 == 0:
                 body.write("".join(buf).encode("ascii"))
                 buf = []
+                _check_deadline(deadline)
         if buf:
             body.write("".join(buf).encode("ascii"))
     header = f"p cnf {stream.num_vars} {stream.num_clauses}\n".encode("ascii")

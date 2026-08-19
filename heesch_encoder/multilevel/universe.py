@@ -24,6 +24,20 @@ from ..placements import enumerate_universe, materialize
 from ..types import Placement
 
 
+
+def _check_deadline(deadline) -> None:
+    """Portable encode guard (audit 2026-08-19 Medium 5 follow-up): the
+    SIGALRM guard in proofcheck.guard is a no-op off POSIX main threads, so
+    the encoder also checks a monotonic deadline between levels / clause
+    batches and raises the same EncodeTimeout."""
+    if deadline is not None:
+        import time
+
+        if time.monotonic() > deadline:
+            from ..proofcheck.guard import EncodeTimeout
+
+            raise EncodeTimeout()
+
 def cellset_key(cs) -> tuple:
     """Canonical order for a cell set: the sorted cell tuple."""
     return tuple(sorted_cells(cs))  # ordered-ok: sorted
@@ -56,7 +70,8 @@ class MLUniverse:
     cells_of: dict                # Placement -> frozenset, cache shared with clauses.py
 
 
-def multilevel_universe(tile_cells, grid: Grid, contact: Contact, m: int) -> MLUniverse:
+def multilevel_universe(tile_cells, grid: Grid, contact: Contact, m: int,
+                        deadline: float | None = None) -> MLUniverse:
     if m < 1:
         raise ValueError("m must be >= 1")
     tile = frozenset(tile_cells)
@@ -80,6 +95,7 @@ def multilevel_universe(tile_cells, grid: Grid, contact: Contact, m: int) -> MLU
     _REJECTED = object()
 
     for _l in range(2, m + 1):
+        _check_deadline(deadline)
         # Q-independent verdicts are cached; Q-dependent checks (overlap with
         # the generating frontier cellset) must re-run per Q, because a
         # placement overlapping one frontier cellset may legally touch

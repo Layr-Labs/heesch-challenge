@@ -36,13 +36,16 @@ class MLClauseStream:
     they cannot drift: the streamed bytes are the emitted bytes."""
 
     def __init__(self, tile_cells, grid: Grid, contact: Contact, m: int,
-                 amo_threshold: int = AMO_THRESHOLD):
+                 amo_threshold: int = AMO_THRESHOLD, deadline: float | None = None):
         self.tile = frozenset(tile_cells)
         self.grid = grid
         self.contact = contact
         self.m = m
         self.amo_threshold = amo_threshold
-        self.uni = multilevel_universe(self.tile, grid, contact, m)
+        # `deadline` (time.monotonic() value) is a portable encode guard only;
+        # it changes no byte of the output.
+        self.deadline = deadline
+        self.uni = multilevel_universe(self.tile, grid, contact, m, deadline=deadline)
         self.level_offsets: tuple = ()
         self.amo_groups: tuple = ()
         self.required_cells: tuple = ()

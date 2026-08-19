@@ -210,3 +210,37 @@ def test_encode_limit_is_clipped_to_budget_deadline(tmp_path, monkeypatch):
     assert out.status is ProofStatus.RESOURCE_EXCEEDED
     assert "before encoding" in out.detail
     assert not called
+
+
+def test_portable_encode_deadline_without_sigalrm(tmp_path, monkeypatch):
+    """The monotonic deadline inside the encoder fires even where SIGALRM is
+    unavailable (Windows / worker threads): run the check in a worker thread,
+    where the alarm guard is a no-op by construction."""
+    import threading
+    import time
+    import heesch_encoder.multilevel.universe as uni
+
+    # Make every level of the universe BFS "slow" by moving the clock.
+    real = time.monotonic
+    t = {"now": real()}
+    monkeypatch.setattr(time, "monotonic", lambda: t["now"])
+    orig = uni._check_deadline
+
+    def advancing(deadline):
+        t["now"] += 10.0
+        orig(deadline)
+    monkeypatch.setattr(uni, "_check_deadline", advancing)
+
+    tile, grid = _unsat_octomino()
+    proof = tmp_path / "p.drat"
+    proof.write_bytes(b"0\n")
+    box = {}
+
+    def run():
+        box["out"] = check_proof_v2(ProofSubmission(str(proof), "0" * 64, 1, 1), tile, grid,
+                                    grid.contact("point"), 2, Tier.RECORD, encode_timeout_s=1)
+    th = threading.Thread(target=run)
+    th.start()
+    th.join(120)
+    assert box["out"].status is ProofStatus.RESOURCE_EXCEEDED
+    assert "encoding F(S,2)" in box["out"].detail

@@ -4,9 +4,11 @@ The checkers are separate processes and are bounded by `checkers.CheckBudget`
 (per-checker caps + an overall deadline, enforced at spawn with
 `subprocess.run(timeout=...)`). The Python encoder is not a subprocess, so it
 gets its own guard: SIGALRM on a POSIX main thread, a no-op elsewhere (Windows,
-worker threads) — there the portable backstop is `CheckBudget.deadline`, which
-the budget-aware pipeline consults before every spawn, so an over-long encode
-still yields RESOURCE_EXCEEDED (no checker is started) rather than an overrun.
+worker threads). The portable layer is the monotonic `deadline` the encoder
+checks itself (`encode_multilevel_stream(deadline=)`, between universe levels
+and every 4096 clauses, raising the same EncodeTimeout), and the outer
+backstop is `CheckBudget.deadline`, which the budget-aware pipeline consults
+before every spawn.
 
 Audit 2026-08-19 Medium 5: this guard used to wrap the whole check (encode +
 checkers), silently capping the documented 1500 s checker deadline at 600 s;

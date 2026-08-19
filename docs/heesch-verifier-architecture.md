@@ -414,9 +414,13 @@ encoding, checkers): the encoder may use at most the first
 `min(600, remaining)` s of it (§13.3 step 3), the checkers share what is
 left, each under its own cap. Worst case the proof stage is 25 min, leaving
 ~5 min of the 30-minute benchmark job for witness verification and
-start-up. On platforms without `SIGALRM` (Windows, non-main threads) the
-encode guard is a no-op and the deadline alone bounds the stage (an
-over-long encode leaves no time for a checker to spawn → `RESOURCE_EXCEEDED`).
+start-up. The encode guard is two-layered: `SIGALRM` where available
+(POSIX main thread) plus a portable monotonic deadline the encoder itself
+checks between universe levels and every 4096 clauses
+(`encode_multilevel_stream(deadline=)`), so Windows and worker-thread
+callers get the same `RESOURCE_EXCEEDED`; and `CheckBudget.deadline`
+remains the outer backstop (an over-long encode leaves no time for a
+checker to spawn).
 
 ### 13.6 Round-trip oracle
 `patch.check_corona(..., hole_mode="none")` is the hole-agnostic geometric
