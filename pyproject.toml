@@ -20,6 +20,9 @@ test = [
     "python-sat==1.9.dev7",
 ]
 # Participant-side proof production (tools/prove.py); never a harness dep.
+# For record-scale formulas (F(S,7)+) use an external solver binary instead:
+# `bash tools/build_solver.sh` builds a pinned CaDiCaL into tools/bin/cadical
+# and prove.py picks it up (the pysat path holds the whole DRAT in memory).
 prove = [
     "python-sat==1.9.dev7",
 ]

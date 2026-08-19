@@ -12,7 +12,11 @@ vendored drat-trim), computes the digests and rewrites the `#PROOF` block.
     python tools/prove.py submission/best.heesch --format drat --no-xz --check
     python tools/prove.py submission/best.heesch --m 7 --band none   # out-of-band (§13.9)
 
-Requires the `prove` extra (`pip install -e '.[prove]'`, i.e. python-sat).
+Requires the `prove` extra (`pip install -e '.[prove]'`, i.e. python-sat) OR
+an external solver binary: `bash tools/build_solver.sh` builds a pinned
+CaDiCaL into tools/bin/cadical, which is tried first and streams the DRAT to
+disk — mandatory in practice for record-scale formulas (F(S,7) of an 11-cell
+shape is a 3 GB DRAT; python-sat's in-process tracing needs ~9x that in RAM).
 Exit codes: 0 proof written; 2 F(S, m) is SATISFIABLE (no proof exists at
 this m — either the shape has a deeper corona than your witness shows or it
 is a tiler); 1 any other failure.
@@ -248,9 +252,46 @@ def solve_with_proof(cnf, solver: str, workdir: pathlib.Path) -> tuple[bool, pat
     res = json.loads(result_path.read_text())
     if res["sat"]:
         return True, None
-    text = drat_path.read_text(encoding="ascii")
-    if not text.endswith("\n0\n"):
+    if not _drat_terminated(drat_path):
         raise RuntimeError("solver worker wrote an incomplete DRAT")
+    return False, drat_path
+
+
+def _drat_terminated(path: pathlib.Path) -> bool:
+    """True iff the text DRAT ends with the empty clause line — checked on the
+    tail only (a record-scale DRAT is GBs; never read it whole)."""
+    size = path.stat().st_size
+    if size == 0:
+        return False
+    with open(path, "rb") as fh:
+        fh.seek(max(0, size - 64))
+        tail = fh.read().rstrip(b"\r\n")
+    return tail.endswith(b"\n0") or tail == b"0"
+
+
+def solve_with_solver_bin(cnf_path, solver_bin: str, workdir: pathlib.Path,
+                          extra_args=("-q", "--no-binary")) -> tuple[bool, pathlib.Path | None]:
+    """Solve with an external CaDiCaL / Kissat binary that writes the DRAT
+    straight to disk (`<bin> [args] formula.cnf proof.drat`; exit 10 = SAT,
+    20 = UNSAT). This is the record-scale path: the pysat worker holds the
+    whole DRAT in Python memory (peak ~9x the DRAT — 27 GB for the 11-hex
+    F(S,7)), an external solver streams it. Raises RuntimeError on any other
+    exit or a missing/unterminated proof."""
+    drat_path = workdir / "proof.drat"
+    if drat_path.exists():
+        drat_path.unlink()
+    argv = [solver_bin, *extra_args, str(cnf_path), str(drat_path)]
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True, errors="replace",
+                              stdin=subprocess.DEVNULL)
+    except OSError as e:
+        raise RuntimeError(f"cannot run {solver_bin}: {e}") from None
+    if proc.returncode == 10:
+        return True, None
+    if proc.returncode != 20:
+        raise RuntimeError(f"{solver_bin} exited {proc.returncode}:\n" + (proc.stderr or proc.stdout)[-1500:])
+    if not drat_path.exists() or not _drat_terminated(drat_path):
+        raise RuntimeError(f"{solver_bin} reported UNSAT but wrote no terminated DRAT")
     return False, drat_path
 
 
@@ -288,6 +329,14 @@ def main(argv=None) -> int:
                          "cadical195, lingeling in turn and keep the first DRAT that drat-trim "
                          "verifies — python-sat's proof tracing has produced unverifiable DRATs "
                          "on some formulas with individual solvers")
+    ap.add_argument("--solver-bin", default=None,
+                    help="path to an external CaDiCaL/Kissat binary (default: tools/bin/cadical "
+                         "if tools/build_solver.sh built it): invoked as `<bin> --solver-args "
+                         "formula.cnf proof.drat`, the DRAT streams to disk — use this for "
+                         "record-scale formulas (F(S,7)+), the pysat path needs ~9x the DRAT in RAM; "
+                         "tried before the pysat solvers, pass --solver none to skip them")
+    ap.add_argument("--solver-args", default="-q --no-binary",
+                    help="arguments for --solver-bin before the two file names (default '-q --no-binary')")
     ap.add_argument("--no-core", action="store_true",
                     help="submit the LRAT against the full formula instead of the core clause "
                          "list (default: core — the checkers then load only the clauses the "
@@ -371,17 +420,33 @@ def main(argv=None) -> int:
               f"proof band {profile.harness_band}; the benchmark job will answer "
               "RESOURCE_EXCEEDED (architecture §13.9)", file=sys.stderr)
 
+    pysat_ok = True
     try:
         import pysat  # noqa: F401
     except ImportError:
-        return _fail("python-sat not installed (pip install -e '.[prove]')")
+        pysat_ok = False
 
     selfcheck = have_trim and not args.no_selfcheck
     if not have_trim and not args.no_selfcheck:
         print(f"warning: {drat_trim} not built; skipping the DRAT self-check "
               "(the harness will still verify it)", file=sys.stderr)
     solvers = (["cadical153", "glucose4", "cadical195", "lingeling"]
-               if args.solver == "auto" else [args.solver])
+               if args.solver == "auto" else ([] if args.solver == "none" else [args.solver]))
+    solver_bin = args.solver_bin
+    if solver_bin is None:
+        default_bin = checker_path("cadical", checker_dir)
+        if default_bin.exists():
+            solver_bin = str(default_bin)
+    if solver_bin is not None:
+        solvers = [f"bin:{solver_bin}"] + solvers
+    if not pysat_ok:
+        solvers = [x for x in solvers if x.startswith("bin:")]
+        if not solvers:
+            return _fail("python-sat not installed (pip install -e '.[prove]') and no "
+                         "--solver-bin (tools/build_solver.sh builds CaDiCaL)")
+    if not solvers:
+        return _fail("no solver: pass --solver-bin PATH (tools/build_solver.sh builds CaDiCaL) "
+                     "or a pysat --solver name")
 
     # Every intermediate lives in a private temp dir on the SAME filesystem as
     # the outputs (so the final os.replace is atomic) and is removed on every
@@ -400,9 +465,13 @@ def main(argv=None) -> int:
         drat_path = None
         verified_by = None
         for solver in solvers:
-            print(f"solving with {solver} (proof logging on, worker process) ...", flush=True)
+            print(f"solving with {solver} (proof logging on) ...", flush=True)
             try:
-                sat, drat_path = solve_with_proof(cnf_path, solver, tmpdir)
+                if solver.startswith("bin:"):
+                    sat, drat_path = solve_with_solver_bin(cnf_path, solver[4:], tmpdir,
+                                                           tuple(args.solver_args.split()))
+                else:
+                    sat, drat_path = solve_with_proof(cnf_path, solver, tmpdir)
             except RuntimeError as e:
                 print(f"  {solver}: {e}", file=sys.stderr)
                 continue

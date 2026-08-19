@@ -89,7 +89,8 @@ def _need_solving():
 
 def test_failed_solver_leaves_no_leftovers(prove, subdir, capsys):
     _need_solving()
-    rc = prove.main([str(subdir / "best.heesch"), "--solver", "no-such-solver"])
+    rc = prove.main([str(subdir / "best.heesch"), "--solver", "no-such-solver",
+                     "--solver-bin", str(subdir.parent / "no-such-binary")])
     assert rc == 1
     assert sorted(os.listdir(subdir)) == ["best.heesch"]
     assert "#PROOF" not in (subdir / "best.heesch").read_text()
@@ -112,3 +113,56 @@ def test_happy_path_installs_atomically_and_cleans_up(prove, subdir):
     # --force re-proves over the existing files.
     assert prove.main([str(subdir / "best.heesch"), "--m", "3", "--solver", "cadical153",
                        "--no-xz", "--force"]) == 0
+
+
+# --- Plan 3 P4: external solver binary (DRAT streams to disk) ----------------
+
+def _fake_solver(tmp_path, rc, drat_text=None):
+    """A stand-in for cadical/kissat: `<bin> -q --no-binary formula.cnf proof.drat`."""
+    exe = tmp_path / "fake-solver"
+    body = "#!/bin/sh\n# args: -q --no-binary CNF DRAT\nfor last; do :; done\n"
+    if drat_text is not None:
+        body += f"printf '{drat_text}' > \"$last\"\n"
+    body += f"exit {rc}\n"
+    exe.write_text(body)
+    exe.chmod(0o755)
+    return exe
+
+
+def test_solver_bin_unsat_path(prove, tmp_path):
+    work = tmp_path / "w"
+    work.mkdir()
+    (work / "formula.cnf").write_text("p cnf 1 2\n1 0\n-1 0\n")
+    exe = _fake_solver(tmp_path, 20, "1 0\\n0\\n")
+    sat, drat = prove.solve_with_solver_bin(work / "formula.cnf", str(exe), work)
+    assert sat is False and drat.read_text() == "1 0\n0\n"
+
+
+def test_solver_bin_sat_and_error_paths(prove, tmp_path):
+    work = tmp_path / "w"
+    work.mkdir()
+    (work / "formula.cnf").write_text("p cnf 1 1\n1 0\n")
+    assert prove.solve_with_solver_bin(work / "formula.cnf", str(_fake_solver(tmp_path, 10)), work) == (True, None)
+    with pytest.raises(RuntimeError):          # non-standard exit code
+        prove.solve_with_solver_bin(work / "formula.cnf", str(_fake_solver(tmp_path, 1)), work)
+    with pytest.raises(RuntimeError):          # UNSAT claimed, no terminated DRAT
+        prove.solve_with_solver_bin(work / "formula.cnf", str(_fake_solver(tmp_path, 20, "1 0\\n")), work)
+
+
+def test_drat_terminated_checks_the_tail_only(prove, tmp_path):
+    p = tmp_path / "d.drat"
+    p.write_bytes(b"1 2 0\n" * 100000 + b"0\n")
+    assert prove._drat_terminated(p)
+    p.write_bytes(b"1 2 0\n" * 100000)
+    assert not prove._drat_terminated(p)
+
+
+def test_happy_path_with_real_cadical_binary(prove, subdir):
+    exe = ROOT / "tools" / "bin" / "cadical"
+    if not exe.exists() or not (ROOT / "tools" / "bin" / "drat-trim").exists():
+        pytest.skip("tools/bin/cadical (tools/build_solver.sh) or drat-trim not built")
+    rc = prove.main([str(subdir / "best.heesch"), "--m", "3", "--solver", "none",
+                     "--solver-bin", str(exe), "--no-xz"])
+    assert rc == 0
+    sub = parse_submission((subdir / "best.heesch").read_text(encoding="ascii"))
+    assert sub.proof is not None and sub.proof.m == 3
