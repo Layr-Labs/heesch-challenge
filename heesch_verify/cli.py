@@ -105,7 +105,13 @@ def main(argv=None) -> int:
         gate_kwargs = {"profile": profile}
         if args.band != "profile":
             gate_kwargs["band"] = named_band(args.band)
-        verdict = ProofCarryingGate(shape_path.parent, checker_dir, **gate_kwargs).check(sub, outcome)
+        try:
+            verdict = ProofCarryingGate(shape_path.parent, checker_dir, **gate_kwargs).check(sub, outcome)
+        except OSError as e:
+            # Same discipline as the load path: a maintainer misconfiguration
+            # (unreadable scratch, bad checker dir) reports, never tracebacks.
+            print(json.dumps({"error": "IO", "message": f"check-proof: {e}"}))
+            return 1
         out = outcome.result.to_json()
         out["proof"] = verdict.to_json()
         out["proof"]["band"] = args.band

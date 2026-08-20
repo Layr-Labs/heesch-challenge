@@ -304,11 +304,18 @@ def check_proof_encoded(sub: ProofSubmission, enc, tier: Tier = Tier.RECORD,
             cnf_path = enc.path
         else:
             cnf_path = os.path.join(td, "formula.cnf")
-            if streamed:
-                enc.write_dimacs(cnf_path)
-            else:
-                with open(cnf_path, "wb") as fh:
-                    fh.write(enc.dimacs)
+            try:
+                if streamed:
+                    enc.write_dimacs(cnf_path)
+                else:
+                    with open(cnf_path, "wb") as fh:
+                        fh.write(enc.dimacs)
+            except OSError as e:
+                # ENOSPC/EIO copying the multi-GB CNF into checker scratch:
+                # a resource outcome, never a traceback.
+                return ProofOutcome(ProofStatus.RESOURCE_EXCEEDED,
+                                    f"writing the regenerated CNF to scratch failed: {e}",
+                                    cnf_digest=enc.digest, proof_bytes=proof_bytes)
         core_clauses = 0
         if core_path is not None:
             # 5b. Core subset: exact membership against F, then the checkers

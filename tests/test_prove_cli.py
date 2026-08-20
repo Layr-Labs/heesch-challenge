@@ -171,3 +171,18 @@ def test_happy_path_with_real_cadical_binary(prove, subdir):
     assert rc == 0
     sub = parse_submission((subdir / "best.heesch").read_text(encoding="ascii"))
     assert sub.proof is not None and sub.proof.m == 3
+
+
+def test_worker_refuses_existing_outputs(tmp_path, prove):
+    # The hidden --worker self-exec mode writes its two output paths without
+    # argparse; it must never overwrite an existing file (2026-08-20
+    # re-verification, item 1 residual).
+    precious = tmp_path / "precious.txt"
+    precious.write_text("keep me", encoding="ascii")
+    fresh = tmp_path / "fresh.json"
+    for drat, result in ((precious, fresh), (fresh, precious)):
+        with pytest.raises(SystemExit) as ei:
+            prove._worker(str(tmp_path / "f.cnf"), str(drat), str(result), "cadical153")
+        assert "refusing to overwrite" in str(ei.value)
+    assert precious.read_text(encoding="ascii") == "keep me"
+    assert not fresh.exists()

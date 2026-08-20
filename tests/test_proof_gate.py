@@ -438,3 +438,23 @@ def test_census_shape_plus_exact_proof(tmp_path):
     assert m["hh_exact"] is True and m["exact"] is True
     assert m["record_eligible"] is False and m["record_exact"] is False  # exact, but hc = 1 < 5
     assert "Hc = Hh = 1 exactly" in m["verified_claim"]
+
+
+def test_materialize_write_failure_is_structured(tmp_path, monkeypatch):
+    # Write-side OSError during proof materialisation (ENOSPC on scratch mid
+    # decompression) must reject with a code, never escape as a traceback
+    # (2026-08-20 re-verification, item 3a).
+    import errno
+
+    import heesch_verify.proofgate as pg
+
+    text = CENSUS_11 + _block(3, "a" * 64, 1, 1, "p.drat", "drat", "none", "b" * 64)
+    for err, code in ((errno.ENOSPC, ErrorCode.RESOURCE_EXCEEDED),
+                      (getattr(errno, "EIO", errno.EACCES), ErrorCode.PROOF_FILE_INVALID)):
+        def boom(*a, _err=err, **k):
+            raise OSError(_err, os.strerror(_err))
+
+        monkeypatch.setattr(pg, "materialize_proof", boom)
+        v = _gate(tmp_path, text, [("p.drat", b"0\n")])
+        assert v.code is code
+        assert "materializing proof failed" in v.detail

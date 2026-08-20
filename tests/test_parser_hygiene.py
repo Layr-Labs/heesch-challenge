@@ -56,3 +56,27 @@ def test_oversized_whitespace_after_defect_block_rejected():
         parse_submission(text)
     assert ei.value.code is ErrorCode.PARSE_SYNTAX
     assert "too long" in ei.value.message
+
+
+def test_unicode_digits_rejected():
+    # int() alone accepts Unicode decimal digits (e.g. ARABIC-INDIC ONE),
+    # which would let out-of-spec bytes canonicalize to an in-spec shape;
+    # the frozen grammar is ASCII (2026-08-20 re-verification, item 3d).
+    with pytest.raises(VerifyError) as ei:
+        parse_submission("O 0 0 0 1 1 0 ١ 1\n~ 0 0 0\n")
+    assert ei.value.code is ErrorCode.PARSE_SYNTAX
+
+
+def test_underscore_and_plus_integers_rejected():
+    # int() also accepts "1_0" and "+1"; the grammar is -?[0-9]+ only.
+    for tok in ("1_0", "+1"):
+        with pytest.raises(VerifyError) as ei:
+            parse_submission(f"O 0 0 0 1 1 0 {tok} 1\n~ 0 0 0\n")
+        assert ei.value.code is ErrorCode.PARSE_SYNTAX
+
+
+def test_unicode_digit_placement_line_rejected():
+    from heesch_verify.parse import _PLACEMENT_RE
+
+    assert _PLACEMENT_RE.match("١<1,0,0,0,1,0>") is None
+    assert _PLACEMENT_RE.match("1<1,0,0,0,1,0>") is not None

@@ -3,7 +3,9 @@
 Measures how many cells of the next corona's required set a partial corona
 FAILS to cover — the inverse of tile-counting, which is what makes it a
 gradient (§9.2.1). Fields are computed and recorded on every submission; the
-DEFECT_BOARD_ENABLED flag gates display/ranking only.
+DEFECT_BOARD_ENABLED flag gates whether the fraction enters the scalar
+score and the board ordering (score.py §9.2.8) — the fields themselves are
+always emitted.
 
 The claim semantics are lower-bound-shaped (§9.2.2): the verifier confirms
 "a placement achieving defect <= d exists", never that d is minimal.

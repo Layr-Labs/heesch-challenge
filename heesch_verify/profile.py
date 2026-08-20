@@ -96,11 +96,12 @@ STANDARD = ResourceProfile(
 # rows are set from measurements (docs/ml-feasibility.md): F(S,7) at 11–16
 # cells is 36–77 M clauses / 4–8.5 GB DIMACS / 3–7 laptop-minutes / <= 8 GB
 # RSS; F(S,8): 13-hex 97 M clauses / 5.8 GB, 16-hex 146 M / 9.1 GB (counted
-# 2026-08-20); the 20-iamond F(S,7) is only 54 M / 4.2 GB — all inside a
-# 32 GB machine, the 3600 s encode guard and 60 GB of scratch. The one row
-# still out is (20, 8): its worst case is a 20-HEX at ~275 M clauses /
-# ~30 GB DIMACS / ~15-18 GB RSS — plausible on 32 GB but not count-grounded;
-# it enters after measure.yml times it (or trivially on a 64 GB runner).
+# 2026-08-20); the 20-iamond F(S,7) is only 54 M / 4.2 GB — all inside the
+# 3600 s encode guard, 60 GB of scratch, and far under the runner's 128 GB.
+# The one row still out is (20, 8): its worst case is a 20-HEX at ~275 M
+# clauses / ~30 GB DIMACS / ~15-18 GB RSS — comfortable on the 128 GB
+# Blacksmith runner but not count-grounded; it enters after measure.yml
+# times it there.
 RECORD = ResourceProfile(
     name="record",
     harness_band=((16, 8), (20, 7), (50, 4), (100, 3), (200, 2)),

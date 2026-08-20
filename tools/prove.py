@@ -191,8 +191,17 @@ def _worker(cnf_path: str, drat_path: str, result_path: str, solver: str) -> Non
     0xC0000409 fail-fast) AFTER the solve is complete, so the work is done
     here, files are flushed, and the process leaves via os._exit(0) without
     running interpreter teardown. The parent trusts nothing from this process
-    except the files: the DRAT is verified by drat-trim / the harness."""
+    except the files: the DRAT is verified by drat-trim / the harness.
+
+    The output paths are fresh files the parent just created a temp dir for;
+    refusing to overwrite ANY existing file (open mode 'x') means a manual
+    `prove.py --worker ... <some existing file>` cannot clobber it."""
     import json
+
+    for p in (drat_path, result_path):
+        if os.path.lexists(p):
+            raise SystemExit(f"--worker: refusing to overwrite existing {p!r} "
+                             "(worker outputs must be fresh paths)")
 
     from pysat.solvers import Solver
 
@@ -210,11 +219,11 @@ def _worker(cnf_path: str, drat_path: str, result_path: str, solver: str) -> Non
         sat = s.solve()
         proof = None if sat else s.get_proof()
     if not sat:
-        with open(drat_path, "w", encoding="ascii", newline="\n") as fh:
+        with open(drat_path, "x", encoding="ascii", newline="\n") as fh:
             fh.write("\n".join(proof) + "\n0\n")
             fh.flush()
             os.fsync(fh.fileno())
-    with open(result_path, "w", encoding="ascii") as fh:
+    with open(result_path, "x", encoding="ascii") as fh:
         json.dump({"sat": bool(sat), "solver": solver}, fh)
         fh.flush()
         os.fsync(fh.fileno())
@@ -307,7 +316,7 @@ def _xz_into(src: pathlib.Path, dst: pathlib.Path) -> None:
 
 
 def main(argv=None) -> int:
-    if argv is None and len(sys.argv) >= 6 and sys.argv[1] == "--worker":
+    if argv is None and len(sys.argv) == 6 and sys.argv[1] == "--worker":
         _worker(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
         return 0  # unreachable: the worker exits via os._exit
     ap = argparse.ArgumentParser(prog="prove.py", description=__doc__.split("\n\n")[0])
@@ -347,7 +356,7 @@ def main(argv=None) -> int:
     ap.add_argument("--profile", choices=("record", "standard"), default="record",
                     help="the benchmark's resource profile to check the (cells, m) against "
                          "(default record: the dedicated runner, heesch_verify/profile.py; "
-                         "standard: an 8 GB / 30-min job)")
+                         "standard: the 8 GB CI tier)")
     ap.add_argument("--band", choices=("profile", "encoder", "none"), default="profile",
                     help="which (cells, m) band to respect: `profile` (default — warn when the "
                          "benchmark job under --profile would answer RESOURCE_EXCEEDED, refuse "

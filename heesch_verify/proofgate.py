@@ -30,6 +30,7 @@ imported lazily inside check() so the lower-bound path stays independent.
 from __future__ import annotations
 
 import dataclasses
+import errno
 import hashlib
 import lzma
 import os
@@ -54,23 +55,25 @@ PROOF_MAX_PAYLOAD_BYTES = STANDARD.proof_max_payload_bytes
 _XZ_MEMLIMIT = 256 * 1024 * 1024
 _CHUNK = 1024 * 1024
 
-# In-harness proof band (cells, max m): the encoder's feasibility band minus
-# its two heaviest cells ((50, 4) and (200, 2)), because the harness must
-# ENCODE F(S, m) inside the benchmark job as well as check it. (<= 20, 5)
-# admits the exactness proof of every known Hc = 4 shape (11-20 cells);
-# (<= 12, 6) admits an Hc = 5 certificate for a shape up to 12 cells WHEN
-# Hh = 5 (measured: F(S,6) of the 11-hex — 112 s encode at 2.5 GB RSS,
-# drat-trim 61 s, lrat-check 16 s on the 513 MB LRAT); an Hc = 5 shape with
-# Hh = 6 needs F(S,7), which is out of band (§13.9, `band=` below). See
-# docs/ml-feasibility.md.
+# In-harness proof band (cells, max m). Narrower than the encoder's
+# feasibility band because the harness must ENCODE F(S, m) inside the
+# benchmark job as well as check it. The STANDARD band's (<= 20, 5) admits
+# the exactness proof of every known Hc = 4 shape (11-20 cells); (<= 12, 6)
+# admits an Hc = 5 certificate up to 12 cells WHEN Hh = 5 (measured: F(S,6)
+# of the 11-hex — 112 s encode at 2.5 GB RSS, drat-trim 61 s, lrat-check
+# 16 s on the 513 MB LRAT). An Hc = 5 shape with Hh = 6 needs F(S,7):
+# out of the STANDARD band, but inside RECORD's (16,8) (20,7) ... band on
+# the benchmark runner (§13.5/§13.9). See docs/ml-feasibility.md.
 HARNESS_PROOF_BAND = STANDARD.harness_band   # the standard profile's band; RECORD.harness_band is wider
 # Wall-clock guard around the in-process ENCODING step only (pipeline passes
 # it to heesch_encoder.proofcheck.guard); the checkers are bounded separately
-# by the CheckBudget the caller supplies (per-checker caps drat-trim 600 s /
-# cake_lpr 900 s / lrat-check 300 s, overall deadline 1500 s counted from the
-# budget's construction, which the harness does before this gate runs — so the
-# whole proof stage is <= 1500 s end to end, with the encoder allowed at most
-# the first 600 s of it). Exceeding either is RESOURCE_EXCEEDED, never a crash.
+# by the CheckBudget the caller supplies. The numbers are per-profile
+# (profile.py): STANDARD caps drat-trim 600 s / cake_lpr 900 s / lrat-check
+# 300 s inside a 1500 s deadline with the encoder allowed the first 600 s;
+# RECORD is 3600/3600/1800 s inside 9000 s with a 3600 s encode guard. The
+# deadline counts from the budget's construction, which the harness does
+# before this gate runs. Exceeding either is RESOURCE_EXCEEDED, never a
+# crash.
 ENCODE_TIMEOUT_S = STANDARD.encode_timeout_s
 
 CHECKER_NAMES = ("drat-trim", "lrat-check", "cake_lpr")
@@ -90,7 +93,9 @@ def in_harness_band(n_cells: int, m: int) -> bool:
 
 
 # Named bands for the out-of-band record procedure (architecture §13.9):
-# `harness` is what the benchmark job enforces; `encoder` is the encoder's own
+# `harness` is the STANDARD profile's band (the benchmark job enforces its
+# machine-detected profile's band — RECORD on the record runner, so this
+# name is a floor, not the job's policy); `encoder` is the encoder's own
 # measured feasibility band (what the pipeline will ENCODE at all); `none`
 # disables the gate-side band AND the pipeline's feasibility check, for a
 # maintainer re-check on a machine without the job's caps. The harness never
@@ -147,6 +152,14 @@ class ProofFileError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+def _oserror_code(e: OSError) -> ErrorCode:
+    """Scratch exhaustion is a resource outcome; any other I/O failure while
+    handling a proof file rejects as an invalid proof file (fail closed)."""
+    if e.errno in (errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC)):
+        return ErrorCode.RESOURCE_EXCEEDED
+    return ErrorCode.PROOF_FILE_INVALID
 
 
 def _open_regular(path: pathlib.Path) -> int:
@@ -323,6 +336,10 @@ class ProofCarryingGate:
                     self.profile.proof_max_stored_bytes, self.profile.proof_max_payload_bytes)
             except ProofFileError as e:
                 return ProofVerdict(e.code, e.message, m=m)
+            except OSError as e:
+                # Write-side failure (ENOSPC/EDQUOT/EIO on scratch while
+                # decompressing): a structured rejection, never a traceback.
+                return ProofVerdict(_oserror_code(e), f"materializing proof failed: {e}", m=m)
             if payload_sha != block.payload_sha256:
                 return ProofVerdict(
                     ErrorCode.PROOF_FILE_DIGEST_MISMATCH,
@@ -345,6 +362,8 @@ class ProofCarryingGate:
                         self.profile.proof_max_stored_bytes, self.profile.proof_max_payload_bytes)
                 except ProofFileError as e:
                     return ProofVerdict(e.code, "core: " + e.message, m=m)
+                except OSError as e:
+                    return ProofVerdict(_oserror_code(e), f"materializing core failed: {e}", m=m)
                 if core_sha != block.core_sha256:
                     return ProofVerdict(
                         ErrorCode.PROOF_FILE_DIGEST_MISMATCH,
@@ -362,7 +381,8 @@ class ProofCarryingGate:
             tile = frozenset(canonical_form(sub.cells, sub.grid, True))
             out = check_proof_v2(
                 psub, tile, sub.grid, outcome.contact, m,
-                tier=Tier.RECORD, bin_dir=self.checker_dir, budget=self.budget,
+                tier=Tier.RECORD, timeout=float(self.profile.checker_deadline_s),
+                bin_dir=self.checker_dir, budget=self.budget,
                 core_path=(str(core_dst) if core_dst is not None else None),
                 encode_timeout_s=self.profile.encode_timeout_s,
                 enforce_band=self.band is not None,

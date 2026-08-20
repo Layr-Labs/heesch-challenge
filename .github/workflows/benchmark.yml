@@ -109,8 +109,8 @@ jobs:
             nproc; free -m | head -2; df -h "${HEESCH_SCRATCH}" | tail -1
             git rev-parse HEAD
           } | tee benchmark-results/runner.txt
-          # Same thresholds as heesch_verify/profile.py RECORD (MemAvailable >= 56 GiB,
-          # scratch free >= 150 GiB) plus the CPU/arch/sandbox the job needs.
+          # Same thresholds as heesch_verify/profile.py RECORD (MemAvailable >= 24 GiB,
+          # scratch free >= 60 GiB) plus the CPU/arch/sandbox the job needs.
           python3 tools/runner_preflight.py --scratch "${HEESCH_SCRATCH}" --require record \
             | tee -a benchmark-results/runner.txt
 

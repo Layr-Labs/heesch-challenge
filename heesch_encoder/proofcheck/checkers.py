@@ -110,8 +110,9 @@ _SUCCESS = {
 # The default heap is too small for record-scale instances (a 13 M-clause
 # CNF + 500 MB LRAT reported "CakeML heap space exhausted" on the benchmark
 # runner), so the wrapper sizes the heap from the machine's available memory
-# (85 % of MemAvailable, clamped to [1, 12] GB) unless HEESCH_CAKE_HEAP_MB is set
-# (a non-numeric override is ignored). Exhausting
+# (85 % of MemAvailable, clamped to [1 GB, the resource profile's cap —
+# 12 GB standard / 24 GB record]) unless HEESCH_CAKE_HEAP_MB is set (a
+# non-numeric override is ignored). Exhausting
 # it is a RESOURCE outcome, never a verdict on the proof.
 CAKE_LPR_HEAP_MB_MAX = 12288
 CAKE_LPR_HEAP_MB_MIN = 1024

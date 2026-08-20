@@ -16,10 +16,14 @@ from .transform import Xform
 MAX_INT = 2**31
 MAX_LINE_CHARS = 1_000_000
 
+# re.ASCII: \d and \s must not match Unicode digits/whitespace — the frozen
+# grammar is ASCII, and str-mode \d would otherwise accept e.g. '١'.
 _PLACEMENT_RE = re.compile(
     r"^\s*(-?\d+)\s*<\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,"
-    r"\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*>\s*$"
+    r"\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*>\s*$",
+    re.ASCII,
 )
+_INT_RE = re.compile(r"-?[0-9]+", re.ASCII)
 
 Placement = tuple[int, Xform]
 
@@ -146,13 +150,15 @@ class Submission:
 
 
 def _int(tok: str, what: str) -> int:
-    try:
-        v = int(tok)
-    except ValueError:
+    # The frozen grammar is ASCII decimal only: int() alone also accepts
+    # Unicode digits ('١'), underscores ('1_0') and a leading '+', which
+    # would let out-of-spec bytes canonicalize to an in-spec shape.
+    if not _INT_RE.fullmatch(tok):
         # Truncate the echoed token (audit V6): an attacker-controlled first
         # token can be up to MAX_LINE_CHARS long and would otherwise flood the
         # CI log verbatim (and amplify V3's exfil channel).
         raise VerifyError(ErrorCode.PARSE_SYNTAX, f"expected integer for {what}, got {tok[:80]!r}")
+    v = int(tok)
     if abs(v) > MAX_INT:
         raise VerifyError(ErrorCode.PARSE_SYNTAX, f"oversized integer for {what}: {tok[:80]}")
     return v
