@@ -97,7 +97,33 @@ minutes for a record-scale `F(S,7)` (see `ml-feasibility.md`). The benchmark
 runner verifies every `F(S,m)` with `m ≤ 8` for shapes ≤ 16 cells and
 `m ≤ 7` for ≤ 20 cells inside the job.
 
-## 5. What `score.json` tells you
+## 5. The ladder — how the competition actually progresses
+
+The score is designed so there is always a next increment:
+
+1. **Score 1–3, the on-ramp:** census shapes (polyominoes ≤ 10, hexes ≤ 8,
+   iamonds ≤ 12) need no proof — find a deeper witness for a published
+   non-tiler. The census maxima are `Hc = 2` (ominoes) and `3` (hexes,
+   iamonds), so this band is about building your search loop, not winning.
+2. **Score ~4, the proving ground:** the six known `Hc = 4` polyhexes
+   (11–17 cells) and the 20-iamond are published *values* without witnesses —
+   reconstructing a 4-corona witness and proving `F(S,5)` UNSAT with
+   `prove.py` puts you at 4.0 and exercises the full record pipeline.
+3. **Score 4.x, the gradient war:** the `#DEFECT` block. Place partial
+   corona-5 tiles on your best shape; every additional covered cell of the
+   required set is a strictly better score and a promotion. This is where
+   most of the leaderboard motion lives — dozens of increments between 4
+   and 5, visible to everyone, stealable by anyone with a better partial
+   packing of the *same* shape.
+4. **Score 5+, the record:** a shape with a verified 5-corona plus its
+   `F(S,6)`/`F(S,7)` proof — `record_eligible` in the metrics, a research
+   result, and a new chapter for the literature.
+
+Ties rank smaller/tighter shapes first, so even at equal score there is an
+axis to compete on; `minScoreImprovementBips: 0` means every strict
+improvement, however small, promotes.
+
+## 6. What `score.json` tells you
 
 `score` (the scalar), and under `metrics`: `hc_verified` / `hh_verified`
 (the real Heesch numbers), `non_tiler_evidence` (`census` | `proof`),
@@ -106,7 +132,7 @@ runner verifies every `F(S,m)` with `m ≤ 8` for shapes ≤ 16 cells and
 pinned), `defect_*` (your partial-corona accounting), `proof_*` (m, digests,
 checkers, formats), `resource_profile` (`record` on the benchmark runner).
 
-## 6. Rejection codes
+## 7. Rejection codes
 
 Stable API — parse them in your loop. `REJECTED: <CODE>: <detail>` on
 stdout, exit 1, no score file.
@@ -129,7 +155,7 @@ stdout, exit 1, no score file.
 | `RESOURCE_EXCEEDED` | outside the (cells, m) band or a size/time cap — see the profile table in the architecture doc §13.5 |
 | `DUPLICATE` | identical canonical shape already scored at this value |
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 - **`--check` says `CHECKER_UNAVAILABLE` on macOS/ARM:** `cake_lpr` only
   builds on x86-64 Linux; the benchmark runner has it. Your DRAT/LRAT was

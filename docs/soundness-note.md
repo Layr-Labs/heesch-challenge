@@ -42,7 +42,9 @@ The reviewer gets: this note, the two encoder specs, `heesch_encoder/`
 the 46/46 exact-case cross-check (`docs/ml-weak-gap.md`). They do NOT need
 to trust the tests: the claims are about the mathematics of §2–§5.
 
-Recording the outcome: a file `docs/reviews/<YYYY-MM-DD>-<reviewer>.md`
+A self-contained packet to hand a reviewer is
+`docs/reviews/review-packet.md`. Recording the outcome: a file
+`docs/reviews/<YYYY-MM-DD>-<reviewer>.md`
 stating the commit and encoder revision reviewed, one verdict line per
 obligation (confirmed / confirmed-with-conditions / gap found), the argument
 text or a pointer to it, and the reviewer's affiliation. A "gap found" on
