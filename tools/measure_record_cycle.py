@@ -97,7 +97,12 @@ def main(argv=None) -> int:
     solver_bin = args.solver_bin or (str(bin_dir / "cadical") if (bin_dir / "cadical").exists() else None)
     t0 = time.time()
     if solver_bin:
-        sat, drat = prove.solve_with_solver_bin(cnf, solver_bin, work)
+        # No -q, and stream the solver's own periodic report lines: a record-
+        # scale UNSAT solve runs for hours, and a silent captured pipe is
+        # indistinguishable from a hang in a CI live log.
+        sat, drat = prove.solve_with_solver_bin(cnf, solver_bin, work,
+                                                extra_args=("--no-binary",),
+                                                stream_output=True)
         res["solver"] = solver_bin
     else:
         sat, drat = prove.solve_with_proof(cnf, "cadical153", work)

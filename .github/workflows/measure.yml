@@ -16,6 +16,10 @@ on:
         description: "space-separated m values"
         required: true
         default: "7"
+      level_timeout:
+        description: "per-level wall-clock cap in seconds (DNF past it)"
+        required: false
+        default: "14400"
       runner:
         description: "runner label"
         required: true
@@ -44,14 +48,21 @@ jobs:
           bash tools/build_checkers.sh
           bash tools/build_solver.sh
       - name: Measure
+        # A per-level wall-clock cap so one pathological solve cannot silently
+        # eat the whole 10-hour job: timeout(1) kills the level, the loop
+        # records the DNF and moves on. The solver streams its own periodic
+        # report lines (measure_record_cycle passes stream_output), so the
+        # live log always shows progress.
         run: |
           set -euo pipefail
           mkdir -p measure-results
           for m in ${{ inputs.levels }}; do
             work="$HEESCH_SCRATCH/measure-${{ inputs.shape }}-m$m"
-            /usr/bin/time -v python3 tools/measure_record_cycle.py \
+            timeout --signal=INT --kill-after=60 "${{ inputs.level_timeout || '14400' }}" \
+              /usr/bin/time -v python3 tools/measure_record_cycle.py \
               --shape "${{ inputs.shape }}" --m "$m" --work "$work" --cake \
-              --json measure-results/results.jsonl 2>&1 | tee -a measure-results/log.txt
+              --json measure-results/results.jsonl 2>&1 | tee -a measure-results/log.txt \
+              || echo "LEVEL m=$m: DNF (timeout or error, exit $?)" | tee -a measure-results/log.txt
             rm -rf "$work"
           done
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0

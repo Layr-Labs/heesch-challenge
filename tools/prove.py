@@ -279,7 +279,8 @@ def _drat_terminated(path: pathlib.Path) -> bool:
 
 
 def solve_with_solver_bin(cnf_path, solver_bin: str, workdir: pathlib.Path,
-                          extra_args=("-q", "--no-binary")) -> tuple[bool, pathlib.Path | None]:
+                          extra_args=("-q", "--no-binary"),
+                          stream_output: bool = False) -> tuple[bool, pathlib.Path | None]:
     """Solve with an external CaDiCaL / Kissat binary that writes the DRAT
     straight to disk (`<bin> [args] formula.cnf proof.drat`; exit 10 = SAT,
     20 = UNSAT). This is the record-scale path: the pysat worker holds the
@@ -291,14 +292,21 @@ def solve_with_solver_bin(cnf_path, solver_bin: str, workdir: pathlib.Path,
         drat_path.unlink()
     argv = [solver_bin, *extra_args, str(cnf_path), str(drat_path)]
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, errors="replace",
-                              stdin=subprocess.DEVNULL)
+        if stream_output:
+            # Long solves need a heartbeat: let the solver's own periodic
+            # report lines reach the caller's stdout (e.g. a CI live log)
+            # instead of sitting in a captured buffer until the end.
+            proc = subprocess.run(argv, stdin=subprocess.DEVNULL)
+        else:
+            proc = subprocess.run(argv, capture_output=True, text=True, errors="replace",
+                                  stdin=subprocess.DEVNULL)
     except OSError as e:
         raise RuntimeError(f"cannot run {solver_bin}: {e}") from None
     if proc.returncode == 10:
         return True, None
     if proc.returncode != 20:
-        raise RuntimeError(f"{solver_bin} exited {proc.returncode}:\n" + (proc.stderr or proc.stdout)[-1500:])
+        detail = "" if stream_output else "\n" + ((proc.stderr or proc.stdout or "")[-1500:])
+        raise RuntimeError(f"{solver_bin} exited {proc.returncode}:" + detail)
     if not drat_path.exists() or not _drat_terminated(drat_path):
         raise RuntimeError(f"{solver_bin} reported UNSAT but wrote no terminated DRAT")
     return False, drat_path
