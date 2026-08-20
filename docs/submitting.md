@@ -119,9 +119,12 @@ The score is designed so there is always a next increment:
    `F(S,6)`/`F(S,7)` proof — `record_eligible` in the metrics, a research
    result, and a new chapter for the literature.
 
-Ties rank smaller/tighter shapes first, so even at equal score there is an
-axis to compete on; `minScoreImprovementBips: 0` means every strict
-improvement, however small, promotes.
+It is one linear leaderboard: the platform ranks the single `score` scalar,
+`minScoreImprovementBips: 0` means every strict improvement, however small,
+promotes — and an equal score does not displace the incumbent, so being
+first to a value holds it until someone strictly beats it. (The richer
+tie-break ordering in `heesch_verify/score.py` — smaller/tighter shapes
+first — is library code for a possible future board, not the live ranking.)
 
 ## 6. What `score.json` tells you
 
