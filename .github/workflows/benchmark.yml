@@ -25,6 +25,10 @@ jobs:
     # letting it silently score under the narrow `standard` profile.
     runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 240
+    # Yukon reads the score both from the benchmark-score artifact and, like
+    # the reference challenges (ecdsafail), from this job output.
+    outputs:
+      score: ${{ steps.score.outputs.value }}
 
     env:
       # Scratch for the sandboxed verify (DIMACS up to ~15 GB, payloads up to
