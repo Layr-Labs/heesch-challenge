@@ -148,7 +148,7 @@ acceptance rule is unchanged.
 
 1. External mathematical review of M1/M2/M4/M5/M9 (above).
 2. Timing the `F(S,7)` cycle on the benchmark runner before `(12, 7)`
-   enters the in-harness band (`docs/STATUS.md` §4).
+   enters the in-harness band (`docs/STATUS.md` §3).
 3. The 6-hex census divergence and the other §15 open questions of the
    architecture document, unchanged by this audit.
 

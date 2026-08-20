@@ -45,7 +45,7 @@ x86-64 Ubuntu 24.04, ≥ 8 vCPU, **≥ 32 GB RAM** (MemAvailable ≥ 24 GiB idle
 2. Dispatch `record-e2e.yml`: it produces an `F(S,7)` proof with the
    participant tooling and scores it in-harness — the acceptance test for
    the whole record path.
-3. Dispatch `measure.yml` for the shapes listed in `docs/STATUS.md` §4 and
+3. Dispatch `measure.yml` for the shapes listed in `docs/STATUS.md` §3 and
    paste the rows into `docs/ml-feasibility.md`; widen the band from those
    numbers.
 

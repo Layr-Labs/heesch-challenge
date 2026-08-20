@@ -1,0 +1,144 @@
+# Submitting: the participant guide
+
+Everything you need to go from a shape to a scored submission. The verifier
+is deterministic and fail-closed: the same file always scores the same, and
+nothing scores without proof of non-tilerhood. Normative details live in
+`heesch-verifier-architecture.md`; this page is the practical path.
+
+## 1. The loop
+
+```bash
+pip install -e .                     # heesch_verify + harness (stdlib-only)
+bash tools/build_checkers.sh         # drat-trim, lrat-check (+ cake_lpr on x86-64 Linux)
+bash tools/build_solver.sh           # pinned CaDiCaL -> tools/bin/cadical (recommended)
+```
+
+1. Write `submission/best.heesch` (shape + witness, §2).
+2. `python -m heesch_verify submission/best.heesch` — verifies the witness
+   and prints the metrics JSON. Import `heesch_verify.verify_witness` in
+   your search loop instead; it is the same code.
+3. Unless the shape is inside the census (polyominoes ≤ 10, polyhexes ≤ 8,
+   polyiamonds ≤ 12), produce the non-tiler proof:
+   `python tools/prove.py submission/best.heesch --check` (§4).
+4. Submit via Yukon. The benchmark re-verifies everything from scratch in a
+   sandbox and writes `score.json`; any strict score improvement promotes.
+
+## 2. The witness file
+
+```
+H 0 0 0 1 1 0 ...            # grid letter + occupied cells (x y pairs)
+~ 2 2 1                      # claim: hc=2, hh=2, one patch
+19                           # 19 placements follow
+0 <1,0,0,0,1,0>              # level 0 = the center tile, identity transform
+1 <a,b,c,d,e,f>              # corona 1 placements ...
+2 <a,b,c,d,e,f>              # corona 2 placements ...
+```
+
+- A placement is a corona level plus a transform `x' = a·x+b·y+c,
+  y' = d·x+e·y+f` that must be a genuine symmetry of the grid (det ±1 is not
+  enough — shears are rejected). Reflections are allowed.
+- The patch must be a complete surround: every tile of corona `l` touches
+  corona `l−1`, no overlaps, no gaps, no holes in inner coronas. The
+  verifier re-derives all of this; the claimed `hc/hh` are checked
+  lower-bound style (proving less than you claim scores the weaker value).
+- `hh` (hole-permitted coronas) is `hc` or `hc + 1`; with `P = 2` a second
+  patch shows the extra hole-permitted corona.
+- Limits: ≤ 200 cells, `span_x + span_y ≤ 29`, ≤ 20 000 placements per
+  patch, shape file ≤ 2 MiB, ASCII only, plain files (no symlinks).
+
+## 3. The defect block — scoring between coronas
+
+Score = `hc_verified` + a fraction for partial progress on corona `k+1`:
+
+```
+#DEFECT 3 12 12 47           # corona 3, claimed defects (hc/hh views), |required set| = 47
+5                            # 5 partial tiles follow
+3 <a,b,c,d,e,f>
+...
+```
+
+The verifier computes the required set of corona `k+1` and counts the cells
+your partial tiles fail to cover (plus enclosed pockets). Fewer uncovered
+cells → higher fraction (capped below 1). This is the intended competitive
+gradient: many submissions can chip away at the same shape's next corona.
+A present-but-invalid block rejects the whole submission — leave it out
+rather than guessing.
+
+## 4. The proof block — non-tilerhood
+
+Outside the census every scoring submission carries a checked UNSAT proof of
+`F(S, m)` — the formula that is satisfiable iff the shape admits `m`
+hole-permitted coronas. UNSAT ⇒ `Hh ≤ m − 1` ⇒ the shape does not tile.
+`m ≥ hh + 1` is required; `m = hh + 1` also makes your `Hh` exact.
+
+`tools/prove.py` does the whole thing:
+
+```bash
+python tools/prove.py submission/best.heesch --check
+```
+
+encodes `F(S, hh+1)` with the same frozen encoder the harness uses, solves
+it (the CaDiCaL from `tools/build_solver.sh` if built — it streams the proof
+to disk, which is what makes record-scale instances feasible; otherwise
+python-sat), self-checks the DRAT with drat-trim, extracts the **core
+clause list** (the few percent of the formula the proof actually uses — the
+harness hands the checkers only those, which is what keeps record-scale
+checking fast), writes `proof.lrat.xz` + `core.txt.xz` + the `#PROOF` block,
+and with `--check` runs the harness's own gate on the result. Useful flags:
+`--m N` (deeper level), `--out NAME`, `--force` (overwrite), `--solver-bin
+PATH`, `--profile standard|record` (which benchmark band to warn against).
+
+If the solver reports **SAT**, no proof exists at this `m`: the shape has a
+deeper hole-permitted corona than your witness shows (find it and re-prove
+at a higher `m`) — or it tiles the plane.
+
+Cost scales with `m` and shape size: seconds at `m ≤ 4`, ~10–15 laptop
+minutes for a record-scale `F(S,7)` (see `ml-feasibility.md`). The benchmark
+runner verifies every `F(S,m)` with `m ≤ 8` for shapes ≤ 16 cells and
+`m ≤ 7` for ≤ 20 cells inside the job.
+
+## 5. What `score.json` tells you
+
+`score` (the scalar), and under `metrics`: `hc_verified` / `hh_verified`
+(the real Heesch numbers), `non_tiler_evidence` (`census` | `proof`),
+`tier` (`lower_bound` | `exact_proof`), `hh_exact` / `exact`,
+`record_eligible` / `record_exact` (proof-backed `hc ≥ 5`; also value
+pinned), `defect_*` (your partial-corona accounting), `proof_*` (m, digests,
+checkers, formats), `resource_profile` (`record` on the benchmark runner).
+
+## 6. Rejection codes
+
+Stable API — parse them in your loop. `REJECTED: <CODE>: <detail>` on
+stdout, exit 1, no score file.
+
+| code | meaning |
+|---|---|
+| `PARSE_SYNTAX`, `PARSE_COUNT_MISMATCH`, `PARSE_UNKNOWN_GRID` | malformed file |
+| `SHAPE_TOO_LARGE`, `SHAPE_SPAN_EXCEEDED`, `SHAPE_DISCONNECTED`, `SHAPE_HAS_HOLE`, `SHAPE_DUPLICATE_CELL`, `SHAPE_EMPTY` | illegal shape |
+| `XFORM_NOT_SYMMETRY`, `XFORM_REFLECTION_BANNED` | transform is not a grid symmetry |
+| `PATCH_OVERLAP`, `PATCH_GAP`, `PATCH_HOLE_IN_CORONA`, `PATCH_LEVEL_MISMATCH`, `PATCH_ORPHAN_TILE`, `PATCH_NO_CENTRAL_TILE`, `PATCH_MULTIPLE_CENTRAL` | witness is not a valid surround |
+| `CLAIM_BELOW_THRESHOLD` | verified value below the promotion floor |
+| `DEFECT_*` | invalid partial-corona block |
+| `GATE_IS_TILER` | the shape provably tiles the plane |
+| `GATE_INCONCLUSIVE` | outside the census and no `#PROOF` block — the fail-closed rule |
+| `CENSUS_CONTRADICTION` | witness deeper than the published census value (would mean the verifier or census is wrong; never scored) |
+| `PROOF_LEVEL_INCONSISTENT` | `m < hh + 1` |
+| `PROOF_CNF_DIGEST_MISMATCH`, `PROOF_HEADER_MISMATCH` | your CNF is not the harness's regenerated `F(S,m)` — re-run `prove.py` at the current encoder revision |
+| `PROOF_FILE_INVALID`, `PROOF_FILE_DIGEST_MISMATCH`, `PROOF_TRUNCATED`, `GATE_PROOF_INVALID` | proof file missing/corrupt/wrong format/does not verify |
+| `CHECKER_UNAVAILABLE` | checker binaries missing on the host (not your bug) |
+| `RESOURCE_EXCEEDED` | outside the (cells, m) band or a size/time cap — see the profile table in the architecture doc §13.5 |
+| `DUPLICATE` | identical canonical shape already scored at this value |
+
+## 7. Troubleshooting
+
+- **`--check` says `CHECKER_UNAVAILABLE` on macOS/ARM:** `cake_lpr` only
+  builds on x86-64 Linux; the benchmark runner has it. Your DRAT/LRAT was
+  still self-checked with drat-trim.
+- **`prove.py` is slow or out of memory:** build the external solver
+  (`tools/build_solver.sh`) — the python-sat path holds the whole proof in
+  memory and is not viable at record scale.
+- **Score didn't improve:** the board takes any strict improvement; check
+  `metrics.defect_hc` — fewer uncovered cells on the same shape is enough.
+- **Same file, different machine, same score?** Yes — scoring is
+  deterministic by construction; if you ever observe otherwise, that is a
+  bug we want reported.

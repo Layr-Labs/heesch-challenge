@@ -1,151 +1,113 @@
-# Threat model — Heesch challenge verifier and harness
+# Threat model — verifier and harness
 
-What an attacker controls, what we protect, how each surface is bounded, and
-what residual risk we accept. Referenced from `docs/VULN-REVIEW.md` (the
-2026-08-11 participant-side audit used this register: TB4, C2, C4–C6, A4,
-R3) and from `heesch-verifier-architecture.md` §3/§13.8.
+What an attacker controls, how each surface is bounded, and what residual
+risk we accept. Control/risk names (TB*, C*, A-*, R*) are cited from code,
+tests and the historical reviews in `docs/audits/`.
 
 ## 1. Assets
 
-- **A1 — board integrity**: no entry scores more than its geometry proves; no
-  plane tiler holds a place; a "record" is a proven, exact, non-tiler value.
-- **A2 — determinism/reproducibility**: the same bytes always yield the same
-  verdict, on any host, forever (revisions).
-- **A3 — confidentiality of the runner**: a submission cannot read or
-  exfiltrate host files or secrets through the harness or its logs.
-- **A4 — availability/cost**: a submission cannot burn unbounded runner time
-  or memory, nor starve the pipeline.
+- **A1 — board integrity**: no entry scores more than its geometry proves;
+  no plane tiler holds a place.
+- **A2 — determinism**: the same bytes always yield the same verdict, on any
+  host, forever (revisions).
+- **A3 — runner confidentiality**: a submission cannot read or exfiltrate
+  host files or secrets.
+- **A4 — availability/cost**: a submission cannot burn unbounded time,
+  memory or disk.
 
 ## 2. Attacker model
 
-The **participant**: controls every byte of `submission/best.heesch` and of
-any proof file it names, and (conditionally, if the platform materializes
-uploads as git objects) the file *types* under `submission/`. Has no
-privileges on the runner, cannot execute code there (§3 of the architecture:
-nothing under `submission/` is imported or run), and cannot influence the
-maintainers' checkout, the vendored checkers, or the census table.
-Operator, platform and supply-chain compromise are out of scope (mitigated
-separately by SHA-pinned actions, hash-pinned vendored sources, and
-`persist-credentials: false`).
+The **participant**: controls every byte of `submission/best.heesch` and any
+proof/core file it names, and the file types under `submission/`. Cannot
+execute code on the runner (architecture §3), cannot influence the checkout,
+the vendored checkers, the census table, or the resource profile (§13.5 —
+machine-derived, preflight-asserted). Operator, platform and supply-chain
+compromise are out of scope (mitigated separately: SHA-pinned actions,
+hash-pinned vendored sources, `persist-credentials: false`).
 
 ## 3. Trust boundaries
 
 | | Boundary | Crossing |
 |---|---|---|
-| TB1 | participant bytes → our parser (`heesch_verify.parse`) | text grammar, hard caps |
-| TB2 | verified geometry → score (`harness/verify.py`) | fail-closed rule (architecture §2.2) |
-| TB3 | proof bytes → vendored checkers (`proofcheck`) | digests first, size/format gates, sandbox, budgets |
-| TB4 | the shape file as a *file* (regular vs symlink/device) | `O_NOFOLLOW`, `S_ISREG`, bounded read |
-| TB5 | our own encoder as the trust root of every proof (`heesch_encoder`) | frozen revisions, obligations E1–E8 / M1–M9, external review before record announcements |
+| TB1 | participant bytes → our parser | text grammar, hard caps |
+| TB2 | verified geometry → score | fail-closed rule (architecture §2.2) |
+| TB3 | proof bytes → vendored checkers | digests first, size/format gates, sandbox, budgets |
+| TB4 | the shape file as a *file* | `O_NOFOLLOW`, `S_ISREG`, bounded read |
+| TB5 | our encoder as the trust root of every proof | frozen revisions, obligations E1–E8 / M1–M9, external review before record announcements |
 
 ## 4. Controls
 
-- **C1 — no participant code** (A1, A3): only data crosses; the search
-  program is inert; the workflow accepts only regular files under
-  `submission/` (mode 100644/100755) and only that path may change.
-- **C2 — parser hardening** (A3, A4): 2 MiB shape file, 1 000 000-char lines,
-  `|int| <= 2^31`, exact section markers, ≤ 20 000 placements per patch,
-  echoed tokens truncated to 80 chars, trailing garbage rejected, regular
-  file only, no symlinks, decode strict UTF-8; every failure a stable code.
-- **C3 — fail-closed acceptance** (A1): a shape scores only when the witness
-  verifies AND non-tilerhood is proven (census or checked proof); a
-  constructive `TILER` rejects; anything unproven rejects; a broken block
-  present anywhere rejects; the census tripwire (`CENSUS_CONTRADICTION`)
-  turns "our verifier accepted more than the census allows" into a rejection
-  instead of a record.
-- **C4 — independent geometry** (A1): the verifier recomputes everything from
-  the shape line (levels from adjacency, surround from the contact relation,
-  holes by flood fill, symmetries against the explicit point group);
-  submitted labels and claims are never trusted; claims are lower-bound
-  claims.
+- **C1 — no participant code** (A1, A3): only data crosses; the workflow
+  accepts only regular blobs under `submission/`, the only editable path.
+- **C2 — parser hardening** (A3, A4): 2 MiB shape file, 1 000 000-char
+  lines, `|int| <= 2^31`, exact markers, ≤ 20 000 placements per patch,
+  echoed tokens truncated, trailing garbage rejected, regular files only,
+  strict decoding; every failure a stable code.
+- **C3 — fail-closed acceptance** (A1): scores only when the witness
+  verifies AND non-tilerhood is proven; a constructive `TILER` rejects; a
+  broken block present anywhere rejects; `CENSUS_CONTRADICTION` turns
+  "verifier accepted more than the census allows" into a rejection.
+- **C4 — independent geometry** (A1): levels from adjacency, surround from
+  the contact relation, holes by flood fill, symmetries against the explicit
+  point group; submitted labels and claims are never trusted.
 - **C5 — score hygiene** (A1, A2): `score.json` only on full success, wiped
-  before any fallible work and copied out of scratch only after success; the
-  scalar is never a Heesch number; exact fractions; no timings in outputs.
-- **C6 — determinism** (A2): canonical ordering everywhere, `python -I`, hash
-  seed pinned, revision manifests immutable and pinned, encoder AST lint.
-- **C7 — proof-file discipline** (A3, A4): the proof file must be a plain
-  basename in `submission/`, a regular file (`lstat` + `O_NOFOLLOW` +
-  `fstat` identity), ≤ 48 MiB stored / ≤ 1 GiB decompressed — streamed to
-  scratch disk in 1 MiB chunks, never held in memory (xz via stdlib `lzma`,
-  memlimit 256 MiB, bounded `max_length` draining, no
-  trailing data), sha256 checked before any checker sees a byte; the CNF is
-  regenerated by us — the participant's CNF is never read. When a core clause
-  list accompanies an LRAT proof (architecture §13.3 5b), every clause of it
-  is checked by exact string equality to be a clause of our regenerated CNF
-  and the checker is handed a file *we* write from our own CNF's lines — the
-  participant's core bytes never reach the checker; a refutation of a subset
-  of F refutes F, so no choice of core can produce a false VERIFIED, only a
-  NOT VERIFIED or a rejection.
-- **C8 — checker containment** (A3, A4): checkers are vendored from
-  sha256-pinned sources, run with `stdin=/dev/null`, path-only arguments with
-  fixed safe basenames in scratch (argv-injection guard), line-anchored
-  verdict parsing (exit codes ignored; any `NOT VERIFIED` fails), per-checker
-  caps and an overall deadline (`CheckBudget`), inside the same sandbox as
-  the parser (bubblewrap: read-only bind of the repo at a scratch-anchored
-  path, writable scratch only, no network, no capabilities, own IPC/UTS/cgroup
-  namespaces; `sandbox-exec` on macOS). Record tier needs two independent
-  VERIFIED verdicts, one of them the formally-verified `cake_lpr`; a missing
-  checker rejects, never downgrades.
-- **C9 — resource budgets** (A4): corona work budget (~15 s worst case for a
-  legal witness), boundary-word caps above the longest legal boundary,
-  feasibility bands enforced before encoding, checker budgets, 30-minute job
-  timeout, `RESOURCE_EXCEEDED` everywhere else.
+  before fallible work, copied out of scratch only after success; exact
+  fractions; no timings in outputs.
+- **C6 — determinism** (A2): canonical ordering everywhere, `python -I`,
+  immutable sha-pinned revision manifests, encoder AST lint.
+- **C7 — proof-file discipline** (A3, A4): plain basename in `submission/`,
+  regular file (`lstat` + `O_NOFOLLOW` + `fstat` identity), stored and
+  decompressed sizes capped per profile, streamed to scratch disk in 1 MiB
+  chunks (never in memory; `lzma` memlimit 256 MiB, no trailing data),
+  sha256 checked before any checker sees a byte. The CNF is regenerated by
+  us — the participant's CNF is never read. A core list is admitted only by
+  exact string equality against our regenerated CNF's own lines, and the
+  checker is handed a file *we* write; a refutation of a subset of F refutes
+  F, so no choice of core can produce a false VERIFIED.
+- **C8 — checker containment** (A3, A4): sha256-pinned vendored checkers,
+  `stdin=/dev/null`, path-only argv with safe basenames (argv-injection
+  guard), line-anchored verdicts (exit codes ignored; any `NOT VERIFIED`
+  fails), per-checker caps + overall deadline, all inside the same sandbox
+  as the parser (bubblewrap / `sandbox-exec`: read-only repo, writable
+  scratch only, no network, no capabilities). Record tier needs two
+  independent VERIFIED verdicts including the formally-verified `cake_lpr`;
+  a missing or non-executable checker rejects, never downgrades.
+- **C9 — resource budgets** (A4): corona work budget, boundary-word caps,
+  profile bands enforced before encoding, encode guard + checker budgets
+  (§13.5), scratch-disk floor checked before encoding, workflow job timeout;
+  `RESOURCE_EXCEEDED` everywhere else — including ENOSPC.
 
 ## 5. Availability register
 
-- **A-1 corona work**: nested-ring 64-level patches (V4) — bounded by the
-  work budget.
-- **A-2 boundary criteria**: O(n³) on ≤ 410/810-edge words — seconds at
-  most on long-boundary shapes.
-- **A-3 encoding**: `F(S, m)` inside the selected resource profile's
-  in-harness band only (`heesch_verify/profile.py`, architecture §13.5:
-  `record` ≤ 12 cells m ≤ 8, ≤ 20 m ≤ 7, ≤ 50 m ≤ 4, ≤ 100 m ≤ 3, ≤ 200
-  m ≤ 2 on the dedicated runner; `standard` ≤ 12 m ≤ 6, ≤ 20 m ≤ 5, ≤ 50
-  m ≤ 3, ≤ 100 m ≤ 2 on an 8 GB job), measured (`record`: up to ~120 M
-  clauses / 13 GB DIMACS / ~12 GB RSS / ~10 min with the streamed encoder)
-  and additionally wall-clock guarded (the encoder call only: 3600 s record /
-  600 s standard, clipped to the checker budget's remaining time →
-  `RESOURCE_EXCEEDED`); a scratch-disk check precedes encoding and ENOSPC is
-  `RESOURCE_EXCEEDED`; larger is rejected before work. The profile is derived
-  from the machine (MemAvailable, scratch free), never from an environment
-  variable or participant input, and the workflow preflight fails the job on
-  a machine below the record minima (docs/RUNNER.md). Proof payloads (up to
-  8 GiB decompressed under `record`, 1 GiB under `standard`) land on scratch
-  disk, never in memory. Order: the payload is streamed/decompressed/hashed to
-  scratch under these caps BEFORE the CNF is regenerated — it is never
-  parsed or handed to a checker until the regenerated digest matches — because
-  regenerating `F(S, m)` is the expensive step and a bogus digest must not be
-  able to trigger it more cheaply than the bounded decompression.
-- **A-4 checkers/disk**: caps + deadline per profile (`CheckBudget`:
-  `record` drat-trim 3600 s, cake_lpr 3600 s, lrat-check 1800 s, 9000 s
-  overall; `standard` 600 / 900 / 300 s, 1500 s overall); drat-trim's LRAT
-  emission can reach low GB (the regenerated DIMACS itself is up to ~13 GB at
-  the record band's edge, written once — the pipeline reuses the streamed
-  file) — the record runner's ≥ 60 GiB free scratch has the space and the
-  profile refuses to start below 32 GiB free; a proof designed to be slow
-  simply times out (`RESOURCE_EXCEEDED`, no score).
+- **A-1 corona work**: adversarial nested-ring patches — bounded by the work
+  budget (~15 s worst case).
+- **A-2 boundary criteria**: O(n³) on ≤ 410/810-edge words — seconds.
+- **A-3 encoding**: `F(S, m)` inside the selected profile's band only
+  (architecture §13.5), wall-clock guarded (encoder call only), scratch
+  checked before work, ENOSPC → `RESOURCE_EXCEEDED`. The payload is
+  streamed/decompressed/hashed under fixed caps BEFORE the CNF is
+  regenerated, and never parsed or handed to a checker until the regenerated
+  digest matches — regeneration is the expensive step and a bogus digest
+  must not trigger it more cheaply than the bounded decompression.
+- **A-4 checkers/disk**: per-profile caps + deadline; the regenerated DIMACS
+  (up to ~16 GB at the record band's edge) is written once and shared with
+  the checkers; the record runner's scratch floor (32 GiB before encoding,
+  60 GiB at selection) covers it; a proof designed to be slow times out.
 
 ## 6. Residual risks (accepted, documented)
 
-- **R1 — census trust**: `nontiler:census` evidence rests on Kaplan 2022's
-  published exhaustive computation (heesch-sat + Myers's tiling classifier),
-  pinned by sha256 and cross-checked against published counts and our own
-  enumeration. It is a trusted published computation, not a proof
-  certificate; replacing it with maintainer-generated checked proofs for the
-  small shapes is a listed open question (architecture §15).
+- **R1 — census trust**: `nontiler:census` rests on Kaplan 2022's published
+  exhaustive computation, sha-pinned and cross-checked against published
+  counts and our own enumeration — a trusted computation, not a proof
+  certificate. Replacing it with checked proofs is architecture §15(4).
 - **R2 — encoder soundness**: a checked proof certifies UNSAT of *our* CNF;
-  faithfulness rests on the obligations and their tests. Record announcements
-  additionally require external review of the revision (architecture §13.9).
-- **R3 — tiler-gate coverage** (formerly "hollow entries"): closed. Under the
-  fail-closed rule an unrecognised tiler cannot score: it is either in the
-  census (rejected as `tiler:census`), or above it and INCONCLUSIVE (rejected
-  without a proof) — and no UNSAT proof of `F(S, m)` exists for a tiler
-  (M2: a tiling's coronas are weak configurations; M1/M4: they are
-  representable and satisfy `F`). The constructive
-  criteria only improve the rejection reason (`GATE_IS_TILER` vs
-  `GATE_INCONCLUSIVE`).
-- **R4 — platform materialization**: if the platform ever materializes a
-  submission as a symlink or device, TB4/C7 refuse it; if it ever executes
-  participant code, that is outside this model.
-- **R5 — divergence with Kaplan's data**: one open 6-hex (architecture §6);
-  the tripwire makes any *over*-claim relative to the census a rejection.
+  faithfulness rests on obligations M1–M9 and their tests; record
+  announcements additionally require external review (`soundness-note.md`).
+- **R3 — tiler-gate coverage**: closed by the fail-closed rule — an
+  unrecognised tiler is rejected either by the census or as `GATE_INCONCLUSIVE`,
+  and no UNSAT proof of `F(S, m)` exists for a tiler (M1/M2/M4).
+- **R4 — platform materialization**: a symlink/device materialized under
+  `submission/` is refused by TB4/C7; platform-executed participant code is
+  outside this model.
+- **R5 — Kaplan-data divergence**: one open 6-hex (architecture §6); the
+  census tripwire makes any over-claim a rejection.

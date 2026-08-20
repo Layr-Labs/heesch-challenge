@@ -164,7 +164,7 @@ def _one_shape(argv):
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--shape":
         sys.exit(_one_shape(sys.argv[1:]))
-    out_path = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "docs" / "ml-feasibility.md"
+    out_path = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "docs" / "ml-feasibility-counts.md"
     rows = []
 
     shapes = []

@@ -98,7 +98,7 @@ and the proof path **enforced**:
   anisohedral tilers above the census.
 
 ### High 3 — documentation understates the tiler-gate gap — CLOSED
-- README, `docs/CONVENTIONS.md`, `docs/COORDINATION.md`, `docs/REVIEW-FIXES.md`
+- README, `docs/CONVENTIONS.md`, `docs/COORDINATION.md` (since removed; history in git), `docs/REVIEW-FIXES.md`
   (dated addendum) now state the exact guarantee in the audit's own words:
   every tiler in the census is rejected; outside it, tilers with a recognised
   factorization are rejected as tilers; **all other shapes are rejected
