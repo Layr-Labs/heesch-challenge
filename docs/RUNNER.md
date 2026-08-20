@@ -51,7 +51,8 @@ profile actually consumes.)
 2. Dispatch `record-e2e.yml`: it produces an `F(S,7)` proof with the
    participant tooling and scores it in-harness — the acceptance test for
    the whole record path.
-3. Dispatch `measure.yml` for the shapes listed in `docs/STATUS.md` §3;
+3. Dispatch `measure.yml` for the `KAPLAN_SHAPES` keys in
+   `tools/ml_feasibility.py`;
    extend `docs/ml-feasibility.md` with the rows and widen the band to
    `(20, 8)` — on 128 GB, memory is no longer the constraint.
 
@@ -67,12 +68,17 @@ participant-editable.
 
 ## Security posture (unchanged)
 
-The verify stage still runs under bubblewrap (installed by `setup.sh`'s
-best-effort apt step on Blacksmith's GitHub-compatible image): read-only
+The verify stage still runs under bubblewrap (the benchmark and
+record-e2e workflows install it explicitly before the preflight;
+`setup.sh`'s best-effort apt step is the fallback): read-only
 filesystem, no network, no capabilities, writable only in the throwaway
 scratch dir; participant files are parsed, never executed; the checkers are
-the vendored, hash-pinned binaries built by `setup.sh`. See
-`docs/THREAT-MODEL.md`.
+the vendored, hash-pinned binaries built by `setup.sh`. Environment
+variables the job reads: `HEESCH_SCRATCH` (scratch root), and inside the
+sandbox `HEESCH_CHECKER_DIR` / `HEESCH_SCORE_DIR` (set by `benchmark.sh`)
+plus the optional `HEESCH_CAKE_HEAP_MB` (`cake_lpr` heap size override —
+capacity only, it cannot change a verdict; unset means auto-size).
+Profile selection reads none of these. See `docs/THREAT-MODEL.md`.
 
 ## Alternative: a self-hosted box
 

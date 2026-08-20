@@ -43,12 +43,19 @@ H 0 0 0 1 1 0 ...            # grid letter + occupied cells (x y pairs)
   lower-bound style (proving less than you claim scores the weaker value).
 - `hh` (hole-permitted coronas) is `hc` or `hc + 1`; with `P = 2` a second
   patch shows the extra hole-permitted corona.
-- Limits: ≤ 200 cells, `span_x + span_y ≤ 29`, ≤ 20 000 placements per
-  patch, shape file ≤ 2 MiB, ASCII only, plain files (no symlinks).
+- Limits: ≤ 200 cells, `span_x + span_y ≤ 29`, ≤ 20,000 placements per
+  patch, shape file ≤ 2 MiB, plain files (no symlinks). The grammar is
+  ASCII: integer tokens are `-?[0-9]+` only (Unicode digits, `1_0`, `+1`
+  all reject as `PARSE_SYNTAX`), and `prove.py` additionally enforces
+  ASCII on the whole shape file.
 
 ## 3. The defect block — scoring between coronas
 
-Score = `hc_verified` + a fraction for partial progress on corona `k+1`:
+```text
+score = hc_verified + covered fraction of corona hc+1   (fraction < 1)
+```
+
+Higher is better. The fraction is partial progress on corona `k+1`:
 
 ```
 #DEFECT 3 12 12 47           # corona 3, claimed defects (hc/hh views), |required set| = 47
@@ -88,7 +95,12 @@ harness hands the checkers only those, which is what keeps record-scale
 checking fast), writes `proof.lrat.xz` + `core.txt.xz` + the `#PROOF` block,
 and with `--check` runs the harness's own gate on the result. Useful flags:
 `--m N` (deeper level), `--out NAME`, `--force` (overwrite), `--solver-bin
-PATH`, `--profile standard|record` (which benchmark band to warn against).
+PATH`, `--profile standard|record` and `--band profile|encoder|none`. The
+band flags are precise: with any `--band` other than `none`, `prove.py`
+**refuses** a `(cells, m)` outside the encoder's measured feasibility
+band; being outside the selected `--profile`'s in-harness proof band only
+**warns** (the benchmark job would answer `RESOURCE_EXCEEDED`, but the
+proof itself is still producible for a maintainer re-check).
 
 If the solver reports **SAT**, no proof exists at this `m`: the shape has a
 deeper hole-permitted corona than your witness shows (find it and re-prove
@@ -134,8 +146,11 @@ first — is library code for a possible future board, not the live ranking.)
 (the real Heesch numbers), `non_tiler_evidence` (`census` | `proof`),
 `tier` (`lower_bound` | `exact_proof`), `hh_exact` / `exact`,
 `record_eligible` / `record_exact` (proof-backed `hc ≥ 5`; also value
-pinned), `defect_*` (your partial-corona accounting), `proof_*` (m, digests,
-checkers, formats), `resource_profile` (`record` on the benchmark runner).
+pinned), `defect_*` (your partial-corona accounting),
+`score_fraction_num` / `score_fraction_den` (the defect fraction as an
+exact ratio, present when a defect block scored), `proof_*` (m, digests,
+checkers, formats), `resource_profile` (`record` on the benchmark runner),
+and `gate_detail` (which gate decided, e.g. `nontiler:census`).
 
 ## 7. Rejection codes
 

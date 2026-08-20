@@ -1,5 +1,8 @@
 # Response to the 2026-08-16 comparative audit
 
+> Historical record (2026-08-16); superseded by `docs/STATUS.md`. File
+> references may be stale.
+
 Audit: `2026-08-16-comparative-audit.md` (external; reviewed commit
 `e50e6ca`, 2026-08-13). Response date: 2026-08-17. Every finding is listed
 with what changed, where, and how it is tested. Reproduction commands are at

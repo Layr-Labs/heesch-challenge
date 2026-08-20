@@ -74,7 +74,7 @@ hypothesis; candidates are generated from those cellsets by the same
 all-symmetries expansion, filtered by W3.
 
 **Code**: `heesch_encoder/multilevel/universe.py::multilevel_universe`;
-level-1 case `heesch_encoder/universe.py`. **Evidence**:
+level-1 case `heesch_encoder/placements.py`. **Evidence**:
 `tests/encoder/test_ml_universe_m1.py` (brute-force enumeration with
 margin-band saturation agrees with the BFS on the corpus),
 `tests/encoder/test_universe_e1.py` (level 1).
@@ -175,7 +175,7 @@ the maintainers.
 2. `docs/heesch-multilevel-encoder-spec.md` — §2 (objects + theorem),
    §4 (universes), §5 (clauses), §8 (obligations table).
 3. `heesch_encoder/multilevel/{universe,clauses}.py`, `heesch_encoder/amo.py`
-   — the ~600 lines the claims are about.
+   — the ~433 lines the claims are about.
 4. Optional context: `docs/heesch-cnf-encoder-spec.md` (v1, level-1 case),
    `docs/heesch-verifier-architecture.md` (how the proof gate uses all this),
    Kaplan 2022 (arXiv:2105.09438) for the corona definitions.

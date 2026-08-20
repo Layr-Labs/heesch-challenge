@@ -1,5 +1,8 @@
 # External review (2026-08) — findings and fixes
 
+> Historical record (2026-08); superseded by `docs/STATUS.md`. File
+> references may be stale.
+
 Reviewer findings against this repo, what changed, and where to verify.
 Full diff of the remediation:
 **[`50127c6...master`](https://github.com/Layr-Labs/heesch-challenge/compare/50127c6...master)**

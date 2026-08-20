@@ -1,5 +1,8 @@
 # Response to the 2026-08-19 update audit
 
+> Historical record (2026-08-19); superseded by `docs/STATUS.md`. File
+> references may be stale.
+
 Audit: `2026-08-19-update-audit.md` (external; reviewed commit `4f2634b`,
 2026-08-18). Response date: 2026-08-19. Every finding is listed with what
 changed, where, and how it is tested; the running state of each row is kept

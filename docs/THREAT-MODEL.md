@@ -54,7 +54,9 @@ hash-pinned vendored sources, `persist-credentials: false`).
   before fallible work, copied out of scratch only after success; exact
   fractions; no timings in outputs.
 - **C6 — determinism** (A2): canonical ordering everywhere, `python -I`,
-  immutable sha-pinned revision manifests, encoder AST lint.
+  immutable sha-pinned revision manifests, encoder AST lint. The one
+  environment knob on the proof path, `HEESCH_CAKE_HEAP_MB`, sizes the
+  `cake_lpr` heap — capacity, never verdict.
 - **C7 — proof-file discipline** (A3, A4): plain basename in `submission/`,
   regular file (`lstat` + `O_NOFOLLOW` + `fstat` identity), stored and
   decompressed sizes capped per profile, streamed to scratch disk in 1 MiB

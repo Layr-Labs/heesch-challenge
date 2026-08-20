@@ -51,6 +51,20 @@ Status values: FIXED `<commit>` · OPEN · ACCEPTED (with reason).
 The 2026-08-16 comparative audit's findings (two criticals) were closed by
 `a58e13b`/`4f2634b`; detail in `docs/audits/2026-08-16-comparative-audit-response.md`.
 
+## 2a. Independent re-verification, 2026-08-20
+
+The six headline items of the external audit were re-verified
+adversarially against the code. Verdicts, with what remains:
+
+| Audit item | Verdict | Remaining |
+|---|---|---|
+| `prove.py --out` escape/clobber | FIXED | The hidden `--worker` self-exec mode now refuses to overwrite any existing file (open mode `x`, tested); nothing remains. |
+| `Hc = 5, Hh = 6` passes the limits | FIXED to 20 cells (record profile) | 21+ cells and `(20, 8)` still go through the maintainer path (§3.2); the record path has not yet run on the real runner (§3.1). |
+| Malformed input → crash, not rejection | FIXED | Write-side `OSError` during proof/core materialisation and the CNF scratch copy now reject with `RESOURCE_EXCEEDED` (ENOSPC/EDQUOT) or `PROOF_FILE_INVALID`; `--check-proof` reports I/O errors as JSON; the parser enforces ASCII integers (`-?[0-9]+` — Unicode digits, `1_0`, `+1` reject). |
+| Proof-format metadata recorded incorrectly | FIXED | Declared-vs-detected enforced before any checker; both recorded. |
+| Documented timeout policy ≠ implementation | FIXED | The §13.5 table matches `profile.py` exactly; the stale comments in `proofgate.py` / `profile.py` / `checkers.py` / `benchmark.yml` are corrected; the gate now passes the profile's deadline as the pipeline timeout ceiling, removing the latent 3600 s clip. |
+| Encoder soundness externally reviewed | OPEN (unchanged) | Procedure + reviewer packet ready; zero reviews filed (row TB). |
+
 ## 3. Open items (all outside the repository)
 
 1. **Install the Blacksmith GitHub App** for this repo (app.blacksmith.sh —

@@ -71,8 +71,10 @@ preprocessing is covered by its proof.
 Every checker outcome maps to exactly one `ProofStatus`: `VERIFIED`,
 `PROOF_CNF_DIGEST_MISMATCH`, `PROOF_HEADER_MISMATCH`, `PROOF_TRUNCATED`,
 `GATE_PROOF_INVALID`, `RESOURCE_EXCEEDED`, `CHECKER_UNAVAILABLE`. A SAT
-outcome of the formula is `EXACT_UNDECIDED_HOLE_CASE` — an honest "not yet",
-never presented as a failure. Timeout/OOM is `RESOURCE_EXCEEDED`, never
+outcome of the formula is an honest "not yet" — the pipeline reports
+`GATE_PROOF_INVALID` ("a SAT model is not an UNSAT proof") and
+`tools/prove.py` exits 2; it is never presented as evidence either way.
+Timeout/OOM is `RESOURCE_EXCEEDED`, never
 `NOT_VERIFIED`. A missing checker is `CHECKER_UNAVAILABLE`, never a
 downgrade to a weaker checker (audit F1/F2), except the checker-independent
 empty-clause case (F5), which is unreachable from the harness because the
@@ -160,8 +162,10 @@ pins were re-recorded for the renamed key.
 
 ## 12. Determinism and hygiene
 
-No hash-order iteration on the emission path (pragma-audited), no timings in
-outputs, no environment influence (`python -I` in the benchmark).
+No hash-order iteration on the emission path (pragma-audited), no timings
+in outputs, no environment influence on the *encoding* (`python -I` in the
+benchmark; the one checker-side knob, `HEESCH_CAKE_HEAP_MB`, sizes the
+`cake_lpr` heap and cannot change a verdict).
 
 ## 13. Sound uses of v1
 

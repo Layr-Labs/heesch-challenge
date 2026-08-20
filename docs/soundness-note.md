@@ -19,7 +19,7 @@ not scoring. Encoder v1 is not used for acceptance.
 ## External review of M1–M9 — procedure and status
 
 The repository cannot close this obligation by itself; it can only make the
-review cheap, pinned and recordable. Status 2026-08-19: **not yet reviewed
+review cheap, pinned and recordable. Status 2026-08-20: **not yet reviewed
 externally.** Until a review is filed, every record claim is worded as
 *"accepted by the revision-2 verifier and its checked UNSAT proof,
 conditional on the stated encoder soundness obligations (M1/M2/M4/M5/M9)"*
@@ -89,8 +89,8 @@ Combined with a verified witness (`Hc >= hc_verified`, `Hh >= hh_verified`):
 `m >= hh_verified + 1` is forced (`PROOF_LEVEL_INCONSISTENT` otherwise);
 with `m = hh_verified + 1`, `Hh = hh_verified` exactly; and if
 `hc_verified = hh_verified` then **`Hc = Hh = k` exactly**. If
-`hh = hc + 1`, `Hc ∈ {k, k+1}` remains undecided
-(`EXACT_UNDECIDED_HOLE_CASE`).
+`hh = hc + 1`, `Hc ∈ {k, k+1}` remains undecided (recorded as
+`exact = false`).
 
 Assumptions (multilevel spec §8): M1 per-level universe completeness (the
 false-record obligation), M2 relaxation soundness (every real hole-allowed

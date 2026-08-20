@@ -50,8 +50,8 @@ DIMACS ≈ 110 B/clause. RSS is the count's peak, ≈ the encoder's.
 Hex universes are the densest per cell; iamonds the leanest. The one
 band-relevant case not yet grounded is a 20-cell **hex** at `m = 8`
 (≈ 1.9 × the 16-hex ⇒ ~275 M clauses / ~30 GB DIMACS / ~15–18 GB RSS):
-plausible on the 32 GB runner but excluded from the band until
-`measure.yml` times it there (or a 64 GB runner tier makes it trivial).
+comfortable on the 128 GB Blacksmith runner but excluded from the band
+until `measure.yml` times it there.
 
 ## What this buys (architecture §13.5, §13.9)
 

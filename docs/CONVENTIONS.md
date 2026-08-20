@@ -14,11 +14,15 @@ all prior results must be re-verified.
 | Inner-corona holes | Never permitted, either mode | heesch-sat Hc/Hh semantics |
 | Tile itself | Must be hole-free (topological disk) | spec §11; holed heptomino rejects |
 | Central transform | Need not be identity | spec §11 |
-| Hole test | Padded-bbox flood fill of the complement, edge adjacency | spec §7 Stage 2 (heesch-sat's halo-connectivity definition is differentially tested as equivalent) |
+| Hole test | Padded-bbox flood fill of the complement, edge adjacency | spec §7 Stage 2 (differentially tested against an independent padded-box flood fill, `tests/reference_impl.py`; a differential test against heesch-sat's halo-connectivity formulation is still open, `tools/NOTES-kaplan.md`) |
 | Span | Extent (max − min + 1) per axis in grid coordinates; span_x + span_y ≤ 29 | Revision limit, adopted verbatim (bitmap-size workaround) |
 | Cell cap | ≤ 200 cells | Revision limit |
 | Placement cap | 20 000 per patch (RESOURCE_EXCEEDED beyond, requeueable) | resource bound |
 | Corona level cap | 64 (resource bound, far above the search cap of 12) | resource bound |
+
+("Revision" in this table is Epoch AI's FrontierMath Heesch benchmark,
+whose limits are adopted verbatim — not the encoder's "revision 2" freeze
+nor this document's conventions revision v1.)
 
 ## Grid encodings (transcribed verbatim from heesch-sat)
 

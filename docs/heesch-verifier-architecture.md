@@ -87,7 +87,8 @@ Everything else is `REJECTED` with a stable §8 code, nonzero exit, no
   (multilevel spec §2.2). With `hh_verified = m − 1`, `Hh` is exact
   (`hh_exact`); if additionally `hc_verified == hh_verified`, `Hc = Hh = k`
   exactly (`exact`). `hh = hc + 1` with `hh_exact` leaves `Hc` undecided
-  between `k` and `k+1` (`Status.EXACT_UNDECIDED_HOLE_CASE`).
+  between `k` and `k+1` — recorded as `exact = false`, not as a status of
+  its own (the enum's `EXACT_UNDECIDED_HOLE_CASE` is reserved, §8).
 - `tier = exact_proof` iff `exact` via a checked proof; every other accepted
   entry is `tier = lower_bound`.
 - `record_eligible = evidence == proof and hc_verified >= 5`: a checked
@@ -190,23 +191,32 @@ Stable strings; every rejection is `REJECTED: <CODE>: message`, exit 1, no
 | Shape | `SHAPE_EMPTY`, `SHAPE_TOO_LARGE`, `SHAPE_SPAN_EXCEEDED`, `SHAPE_DISCONNECTED`, `SHAPE_HAS_HOLE`, `SHAPE_DUPLICATE_CELL` |
 | Transform | `XFORM_NOT_SYMMETRY`, `XFORM_REFLECTION_BANNED` |
 | Patch | `PATCH_OVERLAP`, `PATCH_LEVEL_MISMATCH`, `PATCH_ORPHAN_TILE`, `PATCH_GAP`, `PATCH_HOLE_IN_CORONA`, `PATCH_NO_CENTRAL_TILE`, `PATCH_MULTIPLE_CENTRAL` |
-| Claims | `CLAIM_BELOW_THRESHOLD`, `CLAIM_WEAKER_THAN_STATED` |
+| Claims | `CLAIM_WEAKER_THAN_STATED` |
 | Defect (§9.2) | `DEFECT_XFORM_INVALID`, `DEFECT_TILE_OVERLAP`, `DEFECT_TILE_NOT_TOUCHING`, `DEFECT_TILE_OUT_OF_BAND`, `DEFECT_CLAIM_MISMATCH`, `DEFECT_LEVEL_MISMATCH` |
 | Gates (§2.2) | `GATE_IS_TILER`, `GATE_INCONCLUSIVE`, `CENSUS_CONTRADICTION` |
 | Proof (§13) | `PROOF_LEVEL_INCONSISTENT`, `CHECKER_UNAVAILABLE`, `PROOF_FILE_INVALID`, `PROOF_FILE_DIGEST_MISMATCH`, `PROOF_CNF_DIGEST_MISMATCH`, `PROOF_HEADER_MISMATCH`, `PROOF_TRUNCATED`, `GATE_PROOF_INVALID` |
-| Store / resources | `DUPLICATE`, `RESOURCE_EXCEEDED` |
+| Resources | `RESOURCE_EXCEEDED` |
 
-Non-terminal statuses: `PROMOTED`, `SUPERSEDED`,
-`EXACT_UNDECIDED_HOLE_CASE`.
+Reserved, never emitted by the benchmark job: `DUPLICATE` and
+`CLAIM_BELOW_THRESHOLD` belong to the leaderboard-store library
+(`heesch_verify/store.py`, not wired into the scoring path), and the
+enum's non-terminal statuses (`PROMOTED`, `SUPERSEDED`,
+`EXACT_UNDECIDED_HOLE_CASE`) are store/library vocabulary — a SAT
+result on the proof path is reported as `GATE_PROOF_INVALID` ("a SAT
+model is not an UNSAT proof"), not as a status of its own.
 
 ## 9. Record fields
 
 ### 9.1 Base fields
 `hc_verified`, `hh_verified`, `cell_count`, `span_x/y`, `symmetry_order`,
 `patch_size`, `grid`, `reflections_used`, `canonical_digest`, `gate_tier`,
-`gate_detail`, `verified_claim` (a sentence stating exactly what was
-established), `claim_discrepancy`, `hc_claimed`, `hh_claimed`,
-`conventions` (§11), `resource_profile` (§13.5).
+`verified_claim` (a sentence stating exactly what was established),
+`claim_discrepancy`, `hc_claimed`, `hh_claimed`, `conventions` (§11),
+`resource_profile` (§13.5). The harness additionally injects
+`gate_detail` (which gate decided, e.g. `nontiler:census`) and — when a
+defect block scored — `score_fraction_num` / `score_fraction_den` (the
+defect fraction as an exact ratio) into `metrics` when building
+`score.json`; they are metrics fields, not `Result` fields.
 
 ### 9.2 Defect board
 9.2.1 The defect is what a partial corona `k+1` FAILS to cover — uncovered
@@ -286,7 +296,7 @@ sha256 + header counts; a plain basename
 never `best.heesch`); the decompressed payload's sha256. The CNF is encoded
 from the tile's canonical form by both `tools/prove.py` and the harness —
 that is the digest contract. The optional `core` line names a clause list —
-the subset of `F(S, m)` the LRAT proof refutes (measured 2–12 % of F), its
+the subset of `F(S, m)` the LRAT proof refutes (measured 2–5 % of F), its
 ids in the LRAT being positions in that list — so the checkers load only
 those clauses; this is what makes record-scale proofs checkable in-band.
 `prove.py` produces it by default.
@@ -359,15 +369,16 @@ silently scoring under the narrow profile.
 | core list | 4 M clauses / 512 MiB | 32 M clauses / 4 GiB |
 | `cake_lpr` heap cap (85 % of MemAvailable, clamped) | 12 GB | 24 GB |
 | scratch required before encoding | 8 GiB | 32 GiB |
-| job timeout (workflow) | 30 min | 240 min |
+| job timeout (workflow) | 25 min (`ci.yml`; no standard-profile proof workflow exists) | 240 min |
 
 `CheckBudget`: each spawn gets `min(cap, deadline − now)`; a non-positive
 remainder is `RESOURCE_EXCEEDED` without spawning. The budget starts when
 the proof stage starts, so the deadline spans materialisation + encoding +
 checkers. The encode guard is two-layered: `SIGALRM` where available plus a
 portable monotonic deadline the encoder checks between universe levels and
-every 4096 clauses. Worst case under `record` ≈ 3.5 h < the 240-min job;
-measured record instances finish in 5–20 min.
+every 4096 clauses. Worst case under `record` is the 9000 s deadline
+≈ 2.5 h < the 240-min job (the encode guard runs inside the deadline, not
+in addition to it); measured record instances finish in 5–20 min.
 
 The record band is measured, not hoped (`ml-feasibility.md`): `F(S,7)` at
 11–16 cells is 36–77 M clauses / ≤ 8 GB RSS; `F(S,8)` at 13–16 cells is
@@ -399,10 +410,11 @@ candidate needs — `F(S,7)` (the `Hc = 5, Hh = 6` case) to 20 cells,
 `F(S,8)` (the `Hc = 6, Hh = 7` case) to 16. Participants produce the proof
 with `tools/prove.py` (external CaDiCaL via `tools/build_solver.sh`; the
 core-LRAT payload is tens of MB xz) and submit normally.
-`.github/workflows/record-e2e.yml` proves the path end to end on every run
-— an `F(S,7)` proof produced by the participant tooling and scored by
-`./benchmark.sh` — and is the regression guard for "a legitimate
-`Hc = 5, Hh = 6` candidate passes the proof limits".
+`.github/workflows/record-e2e.yml` proves the path end to end — an
+`F(S,7)` proof produced by the participant tooling and scored by
+`./benchmark.sh` — on a weekly schedule and on manual dispatch, and is
+the regression guard for "a legitimate `Hc = 5, Hh = 6` candidate passes
+the proof limits".
 
 **Beyond the record band** (> 20 cells at `m ≥ 5`; a 20-cell hex at
 `m = 8` until measured) the harness answers `RESOURCE_EXCEEDED` — fail

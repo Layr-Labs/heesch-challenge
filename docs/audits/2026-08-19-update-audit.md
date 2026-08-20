@@ -1,5 +1,8 @@
 # Updated Audit of `Layr-Labs/heesch-challenge`
 
+> Historical record (2026-08-19); superseded by `docs/STATUS.md`. File
+> references may be stale.
+
 - **Audit date:** 2026-08-19
 - **Repository:** [Layr-Labs/heesch-challenge](https://github.com/Layr-Labs/heesch-challenge)
 - **Previously audited revision:** [`e50e6cad940431b21e055c3b575690cdf217bb92`](https://github.com/Layr-Labs/heesch-challenge/tree/e50e6cad940431b21e055c3b575690cdf217bb92)

@@ -57,7 +57,8 @@ obligations M1–M9 (§8) hold for the frozen revision-2 constants (§11); those
 are what external review (architecture §13.9) attests.
 
 SAT says nothing beyond "a weak configuration exists" — never
-`Hh >= m`, never a failure (`EXACT_UNDECIDED_HOLE_CASE`).
+`Hh >= m`, never a failure; the pipeline reports it as
+`GATE_PROOF_INVALID` ("a SAT model is not an UNSAT proof").
 
 ## 3. Inputs
 

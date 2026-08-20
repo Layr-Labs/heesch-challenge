@@ -1,5 +1,8 @@
 # Comparative Audit of `Layr-Labs/heesch-challenge` and Our Heesch-SAT Challenge
 
+> Historical record (2026-08-16); superseded by `docs/STATUS.md`. File
+> references may be stale.
+
 **Audit date:** 2026-08-16  
 **External repository:** <https://github.com/Layr-Labs/heesch-challenge>  
 **External snapshot:** [`e50e6cad940431b21e055c3b575690cdf217bb92`](https://github.com/Layr-Labs/heesch-challenge/tree/e50e6cad940431b21e055c3b575690cdf217bb92), committed 2026-08-13  

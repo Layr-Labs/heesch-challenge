@@ -1,5 +1,8 @@
 # Vulnerability review — participant-side audit (2026-08-11)
 
+> Historical record (2026-08-11); superseded by `docs/STATUS.md`. File
+> references may be stale.
+
 Method: four parallel sub-agent audits scoped by `docs/THREAT-MODEL.md`
 (parser/TB4, geometry C4+C6, scoring C5, DoS/channel A4+C2). Attacker model:
 **participant only** — controls the bytes of `submission/best.heesch` and,
