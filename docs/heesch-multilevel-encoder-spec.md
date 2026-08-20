@@ -172,17 +172,16 @@ rectangle 1.45 M vars at `m = 3`, 6.7 M at `m = 5`; a 100-cell square DNF at
 ### 10.2 The band (enforced)
 `heesch_encoder.multilevel.api.FEASIBILITY_BAND` (measured policy — it
 changes no CNF byte, so widening it is not a new revision; the revision-2
-manifest carries the 2026-08-07 measurement as history):
-`(<= 12 cells, m <= 7)`, `(<= 20, m <= 5)`, `(<= 50, m <= 4)`,
-`(<= 100, m <= 3)`, `(<= 200, m <= 2)` (`(12, 7)` added 2026-08-19 after the
-`F(S,7)` measurement in docs/ml-feasibility.md — the `Hc = 5, Hh = 6`
-certificate; §10.2a).
+manifest + code-checked addendum carry the history):
+`(<= 20 cells, m <= 8)`, `(<= 50, m <= 4)`, `(<= 100, m <= 3)`,
+`(<= 200, m <= 2)` (measurements in docs/ml-feasibility.md).
 `check_proof_v2` answers `RESOURCE_EXCEEDED` **before encoding** outside it
 (`in_feasibility_band`), and encodes by streaming to disk
 (`encode_multilevel_stream`, byte-identical to `encode_multilevel`) so peak
-memory is the universe, not the formula. The harness applies the slightly
-stricter in-harness band `((12, 6), (20, 5), (50, 3), (100, 2))` because it
-must also encode inside the benchmark job (architecture §13.3).
+memory is the universe, not the formula. The harness applies the stricter
+in-harness band of its resource profile (architecture §13.5: `record`
+`(16,8) (20,7) (50,4) (100,3) (200,2)`, `standard` `(12,6) (20,5) (50,3)
+(100,2)`) because it must also encode inside the benchmark job.
 
 Measured (docs/ml-feasibility.md): every known `Hc = 4` shape (11–20 cells)
 has its exactness proof `F(S, 5)` inside both bands (11-hex: 60 s encode,
@@ -196,10 +195,11 @@ LRAT in 61 s (513 MB, 25 MB xz), lrat-check verifies in 16 s. The
 formally-verified `cake_lpr` needs more than ~6 GB of heap to load that CNF:
 on the standard 8 GB GitHub runner it reports `CakeML heap space exhausted`
 after ~5 min and the harness answers `RESOURCE_EXCEEDED` (naming the checker,
-never `NOT_VERIFIED`); on a ≥ 12 GB machine it is checked in-band. Larger
-shapes at m = 6 (a 20-cell shape would be ~5× that) are the next widening
-question (it is inside the `record` profile, §10.2a); beyond the record
-band the maintainer re-check of architecture §13.9 applies.
+never `NOT_VERIFIED`). With the core list `prove.py` emits by default the
+checkers load ~2–5 % of F and none of this pressure exists — that, plus the
+record runner, is why every `m <= 8` instance at `<= 16` cells (and `m <= 7`
+at `<= 20`) is checked in-band today (§10.2a); beyond the record band the
+maintainer re-check of architecture §13.9 applies.
 
 ### 10.2a The `Hc = 5, Hh = 6` case and the resource profiles
 
@@ -210,8 +210,8 @@ hole-permitted 6-corona can only be certified by `F(S, 7)` — 36–120 M
 clauses for 11–20-cell shapes (`docs/ml-feasibility.md`). The benchmark
 therefore runs on a dedicated runner under the `record` resource profile
 (`heesch_verify/profile.py`, architecture §13.5; `docs/RUNNER.md`), whose
-in-harness band `(12, 8) (20, 7) (50, 4) (100, 3) (200, 2)` admits that
-certificate — and `F(S, 8)` for the `Hc = 6, Hh = 7` case up to 12 cells —
+in-harness band `(16, 8) (20, 7) (50, 4) (100, 3) (200, 2)` admits that
+certificate — and `F(S, 8)` for the `Hc = 6, Hh = 7` case up to 16 cells —
 **inside the job**. The profile is selected from the machine (MemAvailable,
 scratch), never from an environment variable or participant input; the
 workflow preflight fails a smaller machine loudly. The band is still a

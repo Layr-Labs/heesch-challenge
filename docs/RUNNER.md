@@ -5,7 +5,7 @@ runs on a runner labelled **`heesch-record`** so that record-scale proofs are
 verified and scored **inside the job** — in particular the certificate a
 legitimate `Hc = 5, Hh = 6` candidate needs, `F(S,7)` UNSAT, for every size a
 record candidate realistically has (11–20 cells), and `F(S,8)` (the
-`Hc = 6, Hh = 7` case) for ≤ 12 cells. Measured costs are in
+`Hc = 6, Hh = 7` case) for ≤ 16 cells. Measured costs are in
 `docs/ml-feasibility.md`; the budgets the harness applies are
 `heesch_verify/profile.py` `RECORD`.
 

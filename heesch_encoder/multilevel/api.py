@@ -51,25 +51,15 @@ def regenerate_and_match_v2(claimed_digest: str, tile_cells, grid: Grid,
 
 
 # Feasibility band (multilevel spec §10.2): (max_cells, max_m) pairs the
-# proof pipeline will ENCODE. This is measured policy, not a frozen constant
-# — it changes no CNF byte, so widening it is not a new encoder revision (the
-# revision-2 manifest carries the 2026-08-07 measurement as history).
-# 2026-08-18: (<= 12, 6) added after measuring F(S,6) for the 11-hex Hc=4
-# shape with the streaming encoder: 112 s encode, 2.5 GB RSS, 17.2 M
-# clauses; UNSAT in 157 s; LRAT 513 MB (25 MB xz). See docs/ml-feasibility.md.
-# 2026-08-19: (<= 12, 7) — the certificate an Hc = 5 shape with Hh = 6 needs
-# (audit 2026-08-19 High 1) — after measuring F(S,7) for the same 11-hex:
-# 187 s encode, 3.1 GB RSS, 36.5 M clauses / 3.97 GB DIMACS; UNSAT in 227 s;
-# drat-trim 89 s, LRAT 0.73 GB; core 680 k clauses (1.9 %), core LRAT 358 MB
-# (18 MB xz). Encodable and checkable with a core list on a workstation; the
-# in-harness band stays at (12, 6) until the same cycle is timed on the
-# benchmark runner (docs/ml-feasibility.md, architecture §13.9 step 3).
-# 2026-08-19/20: the record runner (heesch_verify/profile.py RECORD) makes
-# F(S,7) in-harness to 20 cells and F(S,8) to 16; counts: 13-hex F(S,8)
-# 97 M clauses / 5.8 GB RSS, 16-hex F(S,8) 146 M / 9.1 GB, 20-iamond F(S,7)
-# 54 M / 4.2 GB (docs/ml-feasibility.md). The encoder band allows (20, 8)
-# for the maintainer out-of-band path; the harness band holds it back until
-# a runner measurement (a 20-hex F(S,8) is ~275 M clauses).
+# proof pipeline will ENCODE. Measured policy, not a frozen constant — it
+# changes no CNF byte, so widening it is not a new encoder revision; the
+# measurement history lives in docs/ml-feasibility.md and the code-checked
+# revisions/rev-2-addendum.json. Current basis (2026-08-19/20): 11-hex
+# F(S,7) full cycle 187 s encode / 3.1 GB RSS; counts 13-hex F(S,8) 97 M
+# clauses / 5.8 GB, 16-hex F(S,8) 146 M / 9.1 GB, 20-iamond F(S,8) 100 M /
+# 5.8 GB. (20, 8) here covers the maintainer out-of-band path; the HARNESS
+# applies its resource profile's stricter band (heesch_verify/profile.py:
+# record (16,8)(20,7)..., standard (12,6)(20,5)...) on top of this one.
 FEASIBILITY_BAND = ((20, 8), (50, 4), (100, 3), (200, 2))
 
 
