@@ -86,6 +86,17 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install sandbox dependency (bubblewrap)
+        shell: bash
+        run: |
+          # Not preinstalled on GitHub-compatible images; the verify stage's
+          # sandbox (benchmark.sh) and the preflight below require it.
+          command -v bwrap >/dev/null 2>&1 || {
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq bubblewrap
+          }
+          bwrap --version
+
       - name: Runner preflight (fail loud below the record profile's minima)
         shell: bash
         run: |

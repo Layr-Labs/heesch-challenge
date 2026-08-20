@@ -29,6 +29,12 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+      - name: Install sandbox dependency (bubblewrap)
+        run: |
+          command -v bwrap >/dev/null 2>&1 || {
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq bubblewrap
+          }
       - name: Preflight (record profile required)
         run: python3 tools/runner_preflight.py --scratch "$HEESCH_SCRATCH" --require record
       - name: Setup (as Yukon does) + participant solver
