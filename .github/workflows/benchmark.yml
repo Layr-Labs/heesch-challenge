@@ -13,16 +13,17 @@ concurrency:
 
 jobs:
   benchmark:
-    # The record runner (docs/RUNNER.md): a GitHub larger runner named
-    # `heesch-record` (8-core / 32 GB / 300 GB SSD; billed only while a job
-    # runs) — the same label also matches an equivalent self-hosted box. The
-    # harness derives its resource profile from the machine
-    # (heesch_verify/profile.py: `record` iff MemAvailable >= 24 GiB and
-    # scratch free >= 60 GiB) — the band that admits F(S,7) for 11-20-cell
-    # shapes (an Hc = 5, Hh = 6 certificate) and F(S,8) for <= 12 cells. The
-    # preflight below FAILS the job on a smaller machine rather than letting
-    # it silently score under the narrow `standard` profile.
-    runs-on: heesch-record
+    # The record runner (docs/RUNNER.md): Blacksmith's 32-vCPU instance —
+    # 128 GB RAM, 1.5 TB disk, GitHub-image-compatible Ubuntu 24.04, billed
+    # only while a job runs. Prerequisite: the Blacksmith GitHub App is
+    # installed for this repository (app.blacksmith.sh); until then this job
+    # queues with "no runner matching". The harness derives its resource
+    # profile from the machine (heesch_verify/profile.py: `record` iff
+    # MemAvailable >= 24 GiB and scratch free >= 60 GiB) — the band that
+    # admits every record certificate (F(S,7) to 20 cells, F(S,8) to 16).
+    # The preflight below FAILS the job on a smaller machine rather than
+    # letting it silently score under the narrow `standard` profile.
+    runs-on: blacksmith-32vcpu-ubuntu-2404
     timeout-minutes: 240
 
     env:

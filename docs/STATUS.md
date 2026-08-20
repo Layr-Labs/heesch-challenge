@@ -14,8 +14,9 @@ Last updated: 2026-08-20 (Plans 1–3 landed; documentation restructured).
 - Acceptance is fail-closed; a scored entry is a proven non-tiler; the
   harness never executes participant code. Confirmed by the 2026-08-19
   external audit: no false-acceptance route found.
-- The record path runs **in-harness** on the `heesch-record` runner
-  (8-core / 32 GB, `RUNNER.md`): record band `(16,8) (20,7) (50,4) (100,3)
+- The record path runs **in-harness** on Blacksmith's
+  `blacksmith-32vcpu-ubuntu-2404` runner (128 GB / 1.5 TB, `RUNNER.md`):
+  record band `(16,8) (20,7) (50,4) (100,3)
   (200,2)` — every `Hc = 5` certificate to 20 cells, `Hc = 6` to 16 —
   measured in `ml-feasibility.md`; guarded end-to-end by
   `.github/workflows/record-e2e.yml`.
@@ -52,15 +53,16 @@ The 2026-08-16 comparative audit's findings (two criticals) were closed by
 
 ## 3. Open items (all outside the repository)
 
-1. **Create the `heesch-record` runner** (GitHub larger runner, 8-core /
-   32 GB — 5-minute admin step, `RUNNER.md`), then dispatch:
+1. **Install the Blacksmith GitHub App** for this repo (app.blacksmith.sh —
+   5-minute admin step, `RUNNER.md`), then dispatch:
    `benchmark.yml` on the baseline (preflight must pass;
    `resource_profile: record` in score.json) → `record-e2e.yml` (the
    acceptance test: an `F(S,7)` proof scored in-harness) → `measure.yml`
    for the `ml-feasibility.md` shapes at `m = 7/8`.
-2. **Band completion:** a 20-cell-hex `F(S,8)` runner measurement admits
+2. **Band completion:** one 20-cell-hex-scale `F(S,8)` measurement on the
+   Blacksmith runner (128 GB — memory is no longer the constraint) admits
    `(20, 8)`; until then `Hc = 6, Hh = 7` at 17–20 cells goes through the
-   maintainer path of architecture §13.9 (or a 64 GB runner tier).
+   maintainer path of architecture §13.9.
 3. **External M1–M9 review** (`soundness-note.md`): gates record
    *announcements*, not scoring; drop the conditional wording in the same
    commit that files the first review.

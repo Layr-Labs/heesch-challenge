@@ -58,8 +58,8 @@ plausible on the 32 GB runner but excluded from the band until
 The record profile's band `(16,8) (20,7) (50,4) (100,3) (200,2)` — every
 `Hc = 5` certificate (`F(S,6)`/`F(S,7)`) for shapes to 20 cells, and every
 `Hc = 6` certificate (`F(S,7)`/`F(S,8)`) except `F(S,8)` on a 17–20-cell
-shape — verified inside the benchmark job on the 8-core / 32 GB runner
-(`RUNNER.md`), worst measured case well under the 3600 s encode guard and
+shape — verified inside the benchmark job on the Blacksmith runner
+(`RUNNER.md`, 32 vCPU / 128 GB / 1.5 TB), worst measured case well under the 3600 s encode guard and
 9000 s proof-stage deadline. The 8 GB CI runner keeps the standard band
 `(12,6) (20,5) (50,3) (100,2)`.
 

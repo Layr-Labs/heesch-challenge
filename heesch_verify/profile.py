@@ -10,8 +10,8 @@ runner (docs/RUNNER.md) and the harness scales its budgets to it. The profile
 is derived from the machine (`/proc/meminfo` MemAvailable and the free space
 of TMPDIR), never from a participant-controllable input: participants can only
 edit `submission/`, and the workflow preflight asserts the runner meets the
-`record` minima (MemAvailable >= 24 GiB, scratch free >= 60 GiB — an
-8-core / 32 GB runner) before any scoring. A smaller machine silently gets the
+`record` minima (MemAvailable >= 24 GiB, scratch free >= 60 GiB) before any
+scoring. A smaller machine silently gets the
 `standard` profile — the same fail-closed rule, narrower band — and the
 selected profile is written into score.json (`resource_profile`).
 
@@ -89,8 +89,10 @@ STANDARD = ResourceProfile(
     min_scratch_free_bytes=0,
 )
 
-# The record runner (docs/RUNNER.md: an 8-core / 32 GB GitHub larger runner
-# named `heesch-record`, or an equivalent self-hosted box; 4-hour job). Band
+# The record runner (docs/RUNNER.md: Blacksmith blacksmith-32vcpu-ubuntu-2404,
+# 128 GB / 1.5 TB, or an equivalent self-hosted box; 4-hour job). The minima
+# below are deliberately far under that machine — they assert "record-capable",
+# not the exact instance. Band
 # rows are set from measurements (docs/ml-feasibility.md): F(S,7) at 11–16
 # cells is 36–77 M clauses / 4–8.5 GB DIMACS / 3–7 laptop-minutes / <= 8 GB
 # RSS; F(S,8): 13-hex 97 M clauses / 5.8 GB, 16-hex 146 M / 9.1 GB (counted

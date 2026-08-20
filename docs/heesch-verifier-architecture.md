@@ -341,7 +341,7 @@ checker is `CHECKER_UNAVAILABLE`, never a downgrade.
 ### 13.5 Budgets — resource profiles
 Every budget comes from ONE place, `heesch_verify/profile.py`, selected by
 the machine (`detect()`: `record` iff MemAvailable ≥ 24 GiB and scratch
-free ≥ 60 GiB — the 8-core / 32 GB record runner, `RUNNER.md` — else
+free ≥ 60 GiB — met by the Blacksmith record runner, `RUNNER.md` — else
 `standard`). The choice is recorded (`resource_profile`) and is never read
 from an environment variable or participant input: the machine is the
 policy, and the workflow preflight (`tools/runner_preflight.py --require
