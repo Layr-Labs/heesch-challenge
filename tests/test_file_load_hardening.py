@@ -1,4 +1,4 @@
-"""V3/V5/V6 regression (2026-08 audit, docs/VULN-REVIEW.md).
+"""V3/V5/V6 regression (2026-08 audit, docs/audits/2026-08-vuln-review.md).
 
 V3: a symlinked submission/best.heesch would read an arbitrary runner-readable
     file and echo its first token into CI logs.

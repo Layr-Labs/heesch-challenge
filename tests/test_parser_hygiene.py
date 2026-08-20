@@ -1,4 +1,4 @@
-"""V7/V8 regression (2026-08 audit, docs/VULN-REVIEW.md).
+"""V7/V8 regression (2026-08 audit, docs/audits/2026-08-vuln-review.md).
 
 V7: the #DEFECT block was detected by startswith('#DEFECT'), so '#DEFECTXYZ …'
     parsed as a defect block — out-of-spec bytes admitted to the record (and to

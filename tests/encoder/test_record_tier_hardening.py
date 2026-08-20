@@ -1,4 +1,4 @@
-"""F1-F5 regression (2026-08 audit deep sweep, docs/VULN-REVIEW.md). The
+"""F1-F5 regression (2026-08 audit deep sweep, docs/audits/2026-08-vuln-review.md). The
 record-tier proof pipeline is now the ENFORCED acceptance path for every
 out-of-census submission (heesch_verify.proofgate.ProofCarryingGate,
 architecture §2.2), so these are live invariants.

@@ -1,7 +1,7 @@
 {
   "addendum_to": "rev-2.json",
-  "addendum_revision": 2,
-  "date": "2026-08-19",
+  "addendum_revision": 3,
+  "date": "2026-08-20",
   "why": "rev-2.json is immutable (sha256-pinned by tests/encoder/test_revision_freeze.py) and two of its DOCUMENTARY fields no longer describe the enforced behaviour. Neither field is part of frozen_constants_digest, so no CNF byte and no historical proof is affected; this addendum is the corrected provenance and is itself checked against the live code (test_revision_freeze.py::test_rev2_addendum_matches_code). Audit 2026-08-19 Low 12.",
   "corrections": {
     "checkers.record_tier_policy": {
@@ -45,14 +45,9 @@
       ],
       "enforced": [
         {
-          "max_cells": 12,
-          "max_m": 8,
-          "measured": "2026-08-19: F(S,7) of the Kaplan Hc=4 11-hex 187 s encode / 3.1 GB RSS / 36.5 M clauses; F(S,8) ~75 M by count"
-        },
-        {
           "max_cells": 20,
-          "max_m": 7,
-          "measured": "2026-08-19 counts: 13-hex F(S,7) 51.6 M clauses / 4.3 GB RSS, 16-hex F(S,7) 77.3 M / 7.6 GB"
+          "max_m": 8,
+          "measured": "2026-08-19/20 counts: 13-hex F(S,8) 97 M clauses / 5.8 GB RSS, 16-hex F(S,8) 146 M / 9.1 GB, 20-iamond F(S,7) 54 M / 4.2 GB; 11-hex F(S,7) full cycle 187 s encode"
         },
         {
           "max_cells": 50,
@@ -88,7 +83,7 @@
       ],
       "in_harness_band_record": [
         {
-          "max_cells": 12,
+          "max_cells": 16,
           "max_m": 8
         },
         {

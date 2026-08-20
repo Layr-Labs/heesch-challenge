@@ -20,9 +20,10 @@ def test_record_admits_the_record_certificates():
     r = pf.RECORD
     # Hc = 5 with Hh = 6 (F(S,7)) and Hc = 6 with Hh = 7 (F(S,8)) at <= 12 cells;
     # F(S,7) up to 20 cells — the sizes of every known Hc = 4 shape.
-    for cells, m in [(11, 7), (12, 7), (12, 8), (13, 7), (16, 7), (20, 7), (11, 6), (20, 5)]:
+    for cells, m in [(11, 7), (12, 7), (12, 8), (13, 7), (13, 8), (16, 7), (16, 8),
+                     (20, 7), (11, 6), (20, 5)]:
         assert r.in_band(cells, m), (cells, m)
-    assert not r.in_band(20, 8)          # waits for the runner measurement
+    assert not r.in_band(20, 8)          # a 20-hex F(S,8) waits for the runner measurement
     assert not r.in_band(21, 7)
     # The standard (8 GB / 30 min) profile does NOT admit them — explicit.
     for cells, m in [(11, 7), (12, 8), (13, 7), (20, 7)]:
