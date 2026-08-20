@@ -29,7 +29,7 @@ bash tools/build_solver.sh           # pinned CaDiCaL -> tools/bin/cadical (reco
 H 0 0 0 1 1 0 ...            # grid letter + occupied cells (x y pairs)
 ~ 2 2 1                      # claim: hc=2, hh=2, one patch
 19                           # 19 placements follow
-0 <1,0,0,0,1,0>              # level 0 = the center tile, identity transform
+0 <1,0,0,0,1,0>              # level 0 = the center copy (identity here; any grid symmetry is legal)
 1 <a,b,c,d,e,f>              # corona 1 placements ...
 2 <a,b,c,d,e,f>              # corona 2 placements ...
 ```
@@ -67,8 +67,10 @@ rather than guessing.
 ## 4. The proof block — non-tilerhood
 
 Outside the census every scoring submission carries a checked UNSAT proof of
-`F(S, m)` — the formula that is satisfiable iff the shape admits `m`
-hole-permitted coronas. UNSAT ⇒ `Hh ≤ m − 1` ⇒ the shape does not tile.
+`F(S, m)` — a formula that every real `m`-deep hole-permitted corona
+satisfies. So UNSAT ⇒ no such corona ⇒ `Hh ≤ m − 1` ⇒ the shape does not
+tile. (The converse is deliberately not claimed: `F` is a relaxation, and a
+SAT result proves nothing — it is never treated as evidence.)
 `m ≥ hh + 1` is required; `m = hh + 1` also makes your `Hh` exact.
 
 `tools/prove.py` does the whole thing:
@@ -146,7 +148,6 @@ stdout, exit 1, no score file.
 | `SHAPE_TOO_LARGE`, `SHAPE_SPAN_EXCEEDED`, `SHAPE_DISCONNECTED`, `SHAPE_HAS_HOLE`, `SHAPE_DUPLICATE_CELL`, `SHAPE_EMPTY` | illegal shape |
 | `XFORM_NOT_SYMMETRY`, `XFORM_REFLECTION_BANNED` | transform is not a grid symmetry |
 | `PATCH_OVERLAP`, `PATCH_GAP`, `PATCH_HOLE_IN_CORONA`, `PATCH_LEVEL_MISMATCH`, `PATCH_ORPHAN_TILE`, `PATCH_NO_CENTRAL_TILE`, `PATCH_MULTIPLE_CENTRAL` | witness is not a valid surround |
-| `CLAIM_BELOW_THRESHOLD` | verified value below the promotion floor |
 | `DEFECT_*` | invalid partial-corona block |
 | `GATE_IS_TILER` | the shape provably tiles the plane |
 | `GATE_INCONCLUSIVE` | outside the census and no `#PROOF` block — the fail-closed rule |
@@ -156,7 +157,9 @@ stdout, exit 1, no score file.
 | `PROOF_FILE_INVALID`, `PROOF_FILE_DIGEST_MISMATCH`, `PROOF_TRUNCATED`, `GATE_PROOF_INVALID` | proof file missing/corrupt/wrong format/does not verify |
 | `CHECKER_UNAVAILABLE` | checker binaries missing on the host (not your bug) |
 | `RESOURCE_EXCEEDED` | outside the (cells, m) band or a size/time cap — see the profile table in the architecture doc §13.5 |
-| `DUPLICATE` | identical canonical shape already scored at this value |
+
+(`DUPLICATE` and `CLAIM_BELOW_THRESHOLD` exist in the error-code enum for
+the leaderboard-store library; the benchmark job itself never emits them.)
 
 ## 8. Troubleshooting
 

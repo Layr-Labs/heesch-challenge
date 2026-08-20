@@ -88,8 +88,9 @@ corona-(k+1) tiles; the verifier counts the required cells you failed to
 cover. Covering more raises the score continuously — 47 uncovered → 31 → 12
 → 0 is four promotions on the same shape — and only a complete verified
 corona rolls the integer over. **The score is not a Heesch number**; the
-Heesch number is `metrics.hc_verified`. Any strict improvement promotes
-(`minScoreImprovementBips: 0`); ties rank smaller, tighter shapes first.
+Heesch number is `metrics.hc_verified`. One linear leaderboard: any strict
+improvement promotes (`minScoreImprovementBips: 0`); an equal score does not
+displace the incumbent, so being first to a value holds it.
 
 Claims are checked lower-bound style: if your patch proves less than you
 claimed, the weaker verified value is scored and the discrepancy recorded.
