@@ -55,15 +55,33 @@ until `measure.yml` times it there.
 
 ## What this buys (architecture §13.5, §13.9)
 
-The record profile's band `(16,8) (20,7) (50,4) (100,3) (200,2)` — every
-`Hc = 5` certificate (`F(S,6)`/`F(S,7)`) for shapes to 20 cells, and every
-`Hc = 6` certificate (`F(S,7)`/`F(S,8)`) except `F(S,8)` on a 17–20-cell
-shape — verified inside the benchmark job on the Blacksmith runner
-(`RUNNER.md`, 32 vCPU / 128 GB / 1.5 TB), worst measured case well under the 3600 s encode guard and
-9000 s proof-stage deadline. The 8 GB CI runner keeps the standard band
-`(12,6) (20,5) (50,3) (100,2)`.
+The record profile's band `(20,7) (50,4) (100,3) (200,2)` — every `Hc = 5`
+certificate (`F(S,6)`/`F(S,7)`, for `Hh = 5` or `6`) and the `Hc = 6,
+Hh = 6` certificate (`F(S,7)`), for shapes to 20 cells — verified inside the
+benchmark job on the Blacksmith runner (`RUNNER.md`, 32 vCPU / 128 GB /
+1.5 TB), worst measured case clearing every budget with 5–10× margin. The
+one certificate outside the band is `F(S,8)` (`Hc = 6, Hh = 7`): measured
+beyond the checking budgets (above), maintainer path per §13.9. The 8 GB CI
+runner keeps the standard band `(12,6) (20,5) (50,3) (100,2)`.
 
-**Runner measurements (pending):** dispatch `measure.yml` (which runs
-`tools/measure_record_cycle.py --cake` on the record runner) for the shapes
-above; its JSON rows extend this file, and a passing 20-cell-hex-scale
-`m = 8` row widens the band to `(20, 8)`.
+## Record-runner measurements (2026-08-20, run 32409736648)
+
+Full cycles on the production runner (`blacksmith-32vcpu-ubuntu-2404`,
+128 GB), `measure.yml` / `tools/measure_record_cycle.py --cake`. Every
+checker verified, including `cake_lpr` at both levels.
+
+| shape | m | clauses | DIMACS | encode / RSS | solve | drat-trim | core (xz) | cake_lpr core | lrat-check core |
+|---|---|---|---|---|---|---|---|---|---|
+| 16-hex Hc=4 | 7 | 77.3 M | 11.2 GB | 697 s / 7.0 GB | 696 s | 332 s | 1.10 M cl, 1.59 GB (**62 MB**) | **318 s** | 11 s |
+| 16-hex Hc=4 | 8 | 145.7 M | 19.1 GB | 1162 s / 8.6 GB | 1664 s | 1882 s | 2.84 M cl, **33.4 GB (2.2 GB)** | **13 903 s** | 239 s |
+
+**What the m=8 row decided.** Encoding `F(S,8)` is comfortable, but the
+*proof object* explodes: the core LRAT alone is 2.2 GB xz — 11× the record
+profile's 200 MiB stored cap — and the formally-verified check takes 3.9 h,
+3.9× the 3600 s checker cap. So **no `m = 8` row is in the harness band**:
+the `Hc = 6, Hh = 7` certificate (`F(S,8)`) goes through the maintainer
+re-check of architecture §13.9 (the encoder band keeps `(20, 8)` exactly for
+that path). The m=7 row, by contrast, validates the whole record band: it is
+the heaviest `m = 7` instance in the class (the 20-cell shapes are lighter —
+the 20-iamond `F(S,7)` is 54 M clauses), and it clears every budget with
+5–10× margin.

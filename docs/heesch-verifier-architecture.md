@@ -360,7 +360,7 @@ silently scoring under the narrow profile.
 
 | budget | `standard` (8 GB CI runner) | `record` (`RUNNER.md`) |
 |---|---|---|
-| in-harness band (cells, max m) | (12,6) (20,5) (50,3) (100,2) | (16,8) (20,7) (50,4) (100,3) (200,2) |
+| in-harness band (cells, max m) | (12,6) (20,5) (50,3) (100,2) | (20,7) (50,4) (100,3) (200,2) |
 | encode guard (encoder call only) | 600 s | 3600 s |
 | checker caps drat-trim / cake_lpr / lrat-check | 600 / 900 / 300 s | 3600 / 3600 / 1800 s |
 | proof-stage deadline (`CheckBudget`) | 1500 s | 9000 s |
@@ -380,12 +380,14 @@ every 4096 clauses. Worst case under `record` is the 9000 s deadline
 ≈ 2.5 h < the 240-min job (the encode guard runs inside the deadline, not
 in addition to it); measured record instances finish in 5–20 min.
 
-The record band is measured, not hoped (`ml-feasibility.md`): `F(S,7)` at
-11–16 cells is 36–77 M clauses / ≤ 8 GB RSS; `F(S,8)` at 13–16 cells is
-97–146 M / ≤ 9.1 GB; the 20-iamond `F(S,7)` is 54 M / 4.2 GB. The one
-unmeasured corner is a 20-cell *hex* at `m = 8` (~275 M clauses): it enters
-the band after a runner measurement, or trivially on a 64 GB runner tier.
-Widening a profile is measured policy (§13.9), not an encoder revision.
+The record band is measured, not hoped (`ml-feasibility.md`, runner run
+32409736078/32409736648): the heaviest in-band instance, the 16-hex
+`F(S,7)`, clears every budget on the production runner (encode 697 s,
+`cake_lpr` on the 62 MB-xz core in 318 s); the 20-cell shapes are lighter.
+`m = 8` was measured **out**: the 16-hex `F(S,8)` core LRAT is 2.2 GB xz
+(11× the stored cap) and its formal check takes 3.9 h (3.9× the checker
+cap) — that certificate takes the §13.9 maintainer path. Widening a profile
+is measured policy (§13.9), not an encoder revision.
 
 ### 13.6 Round-trip oracle
 `patch.check_corona(..., hole_mode="none")` is the hole-agnostic geometric
@@ -406,8 +408,8 @@ writable scratch only (`TMPDIR`), no network, no capabilities, stdin
 
 A `record_eligible` entry is a machine-checked research claim, **scored
 in-harness**: the record profile admits the certificate every realistic
-candidate needs — `F(S,7)` (the `Hc = 5, Hh = 6` case) to 20 cells,
-`F(S,8)` (the `Hc = 6, Hh = 7` case) to 16. Participants produce the proof
+candidate needs — `F(S,6)` and `F(S,7)` (every `Hc = 5` case, and
+`Hc = 6` with `Hh = 6`) for shapes to 20 cells. Participants produce the proof
 with `tools/prove.py` (external CaDiCaL via `tools/build_solver.sh`; the
 core-LRAT payload is tens of MB xz) and submit normally.
 `.github/workflows/record-e2e.yml` proves the path end to end — an
@@ -416,8 +418,9 @@ core-LRAT payload is tens of MB xz) and submit normally.
 the regression guard for "a legitimate `Hc = 5, Hh = 6` candidate passes
 the proof limits".
 
-**Beyond the record band** (> 20 cells at `m ≥ 5`; a 20-cell hex at
-`m = 8` until measured) the harness answers `RESOURCE_EXCEEDED` — fail
+**Beyond the record band** (any `m = 8` — measured beyond the checking
+budgets, `ml-feasibility.md` — or > 20 cells at `m ≥ 5`) the harness
+answers `RESOURCE_EXCEEDED` — fail
 closed, never a wrong verdict. Maintainers then run the identical code path
 with only the band relaxed (`python -m heesch_verify … --check-proof
 --profile record --band encoder|none`), file the verdict JSON + digests in

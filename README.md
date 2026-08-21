@@ -99,9 +99,10 @@ sheared transform, or an unproven shape is a rejection, not a record.
 `Hc ∈ {Hh − 1, Hh}`, so a record candidate needs `F(S, Hh + 1)` UNSAT:
 `F(S,6)` or `F(S,7)` for `Hc = 5`, up to `F(S,8)` for `Hc = 6`. The
 benchmark job runs on a dedicated runner whose **record profile**
-verifies these inside the job for every realistic candidate size
-(`F(S,7)` to 20 cells, `F(S,8)` to 16 — measured,
-`docs/ml-feasibility.md`), and `score.json` then carries
+verifies the `F(S,6)`/`F(S,7)` certificates — every `Hc = 5` case and
+`Hc = 6` with `Hh = 6` — inside the job for shapes to 20 cells (measured
+on the runner, `docs/ml-feasibility.md`; the rare `F(S,8)` double-jump
+certificate goes through the documented maintainer re-check instead), and `score.json` then carries
 `record_eligible` (proof-backed, `hc ≥ 5`) and `record_exact` (value
 pinned). Producing the proof takes minutes on a laptop. Record claims
 are additionally human-reviewed before announcement

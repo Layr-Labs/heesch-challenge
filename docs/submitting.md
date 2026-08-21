@@ -107,9 +107,14 @@ deeper hole-permitted corona than your witness shows (find it and re-prove
 at a higher `m`) — or it tiles the plane.
 
 Cost scales with `m` and shape size: seconds at `m ≤ 4`, ~10–15 laptop
-minutes for a record-scale `F(S,7)` (see `ml-feasibility.md`). The benchmark
-runner verifies every `F(S,m)` with `m ≤ 8` for shapes ≤ 16 cells and
-`m ≤ 7` for ≤ 20 cells inside the job.
+minutes for a record-scale `F(S,7)` (see `ml-feasibility.md`; the biggest
+shapes also want a big-RAM machine or a ~$1 cloud hour for the drat-trim
+conversion step). The benchmark runner verifies every `F(S,m)` with `m ≤ 7`
+up to 20 cells inside the job — every `Hc = 5` certificate and the `Hc = 6,
+Hh = 6` case. An `F(S,8)` proof (the `Hc = 6, Hh = 7` double jump) is
+measured beyond the in-job checking budgets — its core proof alone is
+~2 GB compressed — and is handled by the maintainers on the identical code
+path (architecture §13.9).
 
 ## 5. The ladder — how the competition actually progresses
 

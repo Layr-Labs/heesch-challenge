@@ -18,12 +18,17 @@ def test_standard_is_the_historical_band_and_budgets():
 
 def test_record_admits_the_record_certificates():
     r = pf.RECORD
-    # Hc = 5 with Hh = 6 (F(S,7)) and Hc = 6 with Hh = 7 (F(S,8)) at <= 12 cells;
-    # F(S,7) up to 20 cells — the sizes of every known Hc = 4 shape.
-    for cells, m in [(11, 7), (12, 7), (12, 8), (13, 7), (13, 8), (16, 7), (16, 8),
-                     (20, 7), (11, 6), (20, 5)]:
+    # F(S,7) to 20 cells: every Hc = 5 certificate (Hh = 5 or 6) and the
+    # Hc = 6, Hh = 6 case, for the sizes of every known Hc = 4 shape —
+    # validated end-to-end on the runner (16-hex F(S,7): cake_lpr 318 s,
+    # core LRAT 62 MB xz).
+    for cells, m in [(11, 7), (12, 7), (13, 7), (16, 7), (20, 7), (11, 6), (20, 5)]:
         assert r.in_band(cells, m), (cells, m)
-    assert not r.in_band(20, 8)          # a 20-hex F(S,8) waits for the runner measurement
+    # m = 8 measured OUT (2026-08-20): the 16-hex core LRAT is 2.2 GB xz and
+    # cake_lpr needs 3.9 h — beyond the stored cap and checker cap. The
+    # Hc = 6, Hh = 7 certificate goes through the maintainer path (§13.9).
+    for cells, m in [(12, 8), (16, 8), (20, 8)]:
+        assert not r.in_band(cells, m), (cells, m)
     assert not r.in_band(21, 7)
     # The standard (8 GB / 30 min) profile does NOT admit them — explicit.
     for cells, m in [(11, 7), (12, 8), (13, 7), (20, 7)]:

@@ -90,21 +90,21 @@ STANDARD = ResourceProfile(
 )
 
 # The record runner (docs/RUNNER.md: Blacksmith blacksmith-32vcpu-ubuntu-2404,
-# 128 GB / 1.5 TB, or an equivalent self-hosted box; 4-hour job). The minima
-# below are deliberately far under that machine — they assert "record-capable",
-# not the exact instance. Band
-# rows are set from measurements (docs/ml-feasibility.md): F(S,7) at 11–16
-# cells is 36–77 M clauses / 4–8.5 GB DIMACS / 3–7 laptop-minutes / <= 8 GB
-# RSS; F(S,8): 13-hex 97 M clauses / 5.8 GB, 16-hex 146 M / 9.1 GB (counted
-# 2026-08-20); the 20-iamond F(S,7) is only 54 M / 4.2 GB — all inside the
-# 3600 s encode guard, 60 GB of scratch, and far under the runner's 128 GB.
-# The one row still out is (20, 8): its worst case is a 20-HEX at ~275 M
-# clauses / ~30 GB DIMACS / ~15-18 GB RSS — comfortable on the 128 GB
-# Blacksmith runner but not count-grounded; it enters after measure.yml
-# times it there.
+# 128 GB / 1.5 TB; 4-hour job). The minima below assert "record-capable", not
+# the exact instance. Band basis — measured on that runner, 2026-08-20 (run
+# 32409736648, docs/ml-feasibility.md): the 16-hex F(S,7) full cycle fits
+# every budget (encode 697 s / 7.0 GB RSS; core LRAT 62 MB xz; cake_lpr on
+# the core 318 s), so F(S,7) is in-band to 20 cells (the 20-cell shapes are
+# lighter or comparable: 20-iamond F(S,7) is 54 M clauses vs the 16-hex's
+# 77 M). F(S,8) was measured OUT: at 16 cells the core LRAT alone is 33 GB
+# raw / 2.2 GB xz (11x the stored cap) and cake_lpr needs 13 903 s (3.9x the
+# cap) — so no m = 8 row is in the harness band; that certificate (the
+# Hc = 6, Hh = 7 double jump) goes through the maintainer re-check of
+# architecture §13.9. Encoding m = 8 is fine (1162 s / 8.6 GB) — the encoder
+# band still allows it for the out-of-band path.
 RECORD = ResourceProfile(
     name="record",
-    harness_band=((16, 8), (20, 7), (50, 4), (100, 3), (200, 2)),
+    harness_band=((20, 7), (50, 4), (100, 3), (200, 2)),
     encode_timeout_s=3600,
     checker_caps={"drat-trim": 3600.0, "cake_lpr": 3600.0, "lrat-check": 1800.0},
     checker_deadline_s=9000,

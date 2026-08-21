@@ -181,7 +181,7 @@ manifest + code-checked addendum carry the history):
 (`encode_multilevel_stream`, byte-identical to `encode_multilevel`) so peak
 memory is the universe, not the formula. The harness applies the stricter
 in-harness band of its resource profile (architecture §13.5: `record`
-`(16,8) (20,7) (50,4) (100,3) (200,2)`, `standard` `(12,6) (20,5) (50,3)
+`(20,7) (50,4) (100,3) (200,2)`, `standard` `(12,6) (20,5) (50,3)
 (100,2)`) because it must also encode inside the benchmark job.
 
 Measured (docs/ml-feasibility.md): every known `Hc = 4` shape (11–20 cells)
@@ -197,10 +197,11 @@ formally-verified `cake_lpr` needs more than ~6 GB of heap to load that CNF:
 on the standard 8 GB GitHub runner it reports `CakeML heap space exhausted`
 after ~5 min and the harness answers `RESOURCE_EXCEEDED` (naming the checker,
 never `NOT_VERIFIED`). With the core list `prove.py` emits by default the
-checkers load ~2–5 % of F and none of this pressure exists — that, plus the
-record runner, is why every `m <= 8` instance at `<= 16` cells (and `m <= 7`
-at `<= 20`) is checked in-band today (§10.2a); beyond the record band the
-maintainer re-check of architecture §13.9 applies.
+checkers load ~2–5 % of F, which removes the memory pressure — that, plus
+the record runner, is why every `m <= 7` instance at `<= 20` cells is
+checked in-band today. At `m = 8` even the core proof explodes (16-hex:
+2.2 GB xz, 3.9 h in `cake_lpr` — measured on the runner, §10.2a and
+docs/ml-feasibility.md), so those take the §13.9 maintainer re-check.
 
 ### 10.2a The `Hc = 5, Hh = 6` case and the resource profiles
 
@@ -211,8 +212,10 @@ hole-permitted 6-corona can only be certified by `F(S, 7)` — 36–120 M
 clauses for 11–20-cell shapes (`docs/ml-feasibility.md`). The benchmark
 therefore runs on a dedicated runner under the `record` resource profile
 (`heesch_verify/profile.py`, architecture §13.5; `docs/RUNNER.md`), whose
-in-harness band `(16, 8) (20, 7) (50, 4) (100, 3) (200, 2)` admits that
-certificate — and `F(S, 8)` for the `Hc = 6, Hh = 7` case up to 16 cells —
+in-harness band `(20, 7) (50, 4) (100, 3) (200, 2)` admits that
+certificate for every realistic candidate size — `F(S, 8)` (the `Hc = 6,
+Hh = 7` case) was measured beyond the checking budgets and takes the §13.9
+maintainer path —
 **inside the job**. The profile is selected from the machine (MemAvailable,
 scratch), never from an environment variable or participant input; the
 workflow preflight fails a smaller machine loudly. The band is still a

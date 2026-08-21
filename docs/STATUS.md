@@ -16,10 +16,11 @@ Last updated: 2026-08-20 (Plans 1–3 landed; documentation restructured).
   external audit: no false-acceptance route found.
 - The record path runs **in-harness** on Blacksmith's
   `blacksmith-32vcpu-ubuntu-2404` runner (128 GB / 1.5 TB, `RUNNER.md`):
-  record band `(16,8) (20,7) (50,4) (100,3)
-  (200,2)` — every `Hc = 5` certificate to 20 cells, `Hc = 6` to 16 —
-  measured in `ml-feasibility.md`; guarded end-to-end by
-  `.github/workflows/record-e2e.yml`.
+  record band `(20,7) (50,4) (100,3) (200,2)` — every `Hc = 5` certificate
+  and `Hc = 6, Hh = 6`, to 20 cells — validated end-to-end on the runner
+  (16-hex `F(S,7)`: `cake_lpr` 318 s on a 62 MB-xz core). `F(S,8)` was
+  **measured out** (core LRAT 2.2 GB xz, `cake_lpr` 3.9 h) → maintainer
+  path per §13.9. Guarded by `.github/workflows/record-e2e.yml`.
 - Record claims are worded *"accepted by the revision-2 verifier and its
   checked UNSAT proof, conditional on the stated encoder soundness
   obligations"* until the external M1–M9 review (below) is filed.
@@ -73,10 +74,13 @@ adversarially against the code. Verdicts, with what remains:
    `resource_profile: record` in score.json) → `record-e2e.yml` (the
    acceptance test: an `F(S,7)` proof scored in-harness) → `measure.yml`
    for the `ml-feasibility.md` shapes at `m = 7/8`.
-2. **Band completion:** one 20-cell-hex-scale `F(S,8)` measurement on the
-   Blacksmith runner (128 GB — memory is no longer the constraint) admits
-   `(20, 8)`; until then `Hc = 6, Hh = 7` at 17–20 cells goes through the
+2. **Band status: settled by measurement (2026-08-20 runner run).**
+   `F(S,7)` to 20 cells is in-band and validated; `F(S,8)` is out at every
+   size (the proof object itself exceeds the submission and checker caps by
+   an order of magnitude) — `Hc = 6, Hh = 7` candidates go through the
    maintainer path of architecture §13.9.
+   (Superseded expectation, kept for the record: the plan was to admit
+   `(20, 8)` after this measurement — the measurement decided the opposite.)
 3. **External M1–M9 review** (`soundness-note.md`): gates record
    *announcements*, not scoring; drop the conditional wording in the same
    commit that files the first review.

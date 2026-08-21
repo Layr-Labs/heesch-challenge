@@ -3,9 +3,10 @@
 The benchmark job (`.github/workflows/benchmark.yml`, dispatched by Yukon)
 runs on **Blacksmith** (blacksmith.sh) managed runners — the same provider
 the reference challenges use — so record-scale proofs are verified and
-scored **inside the job**: `F(S,7)` (the `Hc = 5, Hh = 6` certificate) for
-every realistic candidate size, `F(S,8)` (the `Hc = 6, Hh = 7` case) to
-16 cells today and to 20 after one measurement (below). Measured costs:
+scored **inside the job**: `F(S,6)`/`F(S,7)` — every `Hc = 5` certificate
+and the `Hc = 6, Hh = 6` case — for every realistic candidate size (to
+20 cells). `F(S,8)` was measured beyond the in-job checking budgets (its
+core proof alone is 2.2 GB xz) and takes the maintainer path. Measured costs:
 `docs/ml-feasibility.md`; the budgets the harness applies:
 `heesch_verify/profile.py` `RECORD`.
 
@@ -25,9 +26,9 @@ The workflows use **`blacksmith-32vcpu-ubuntu-2404` — 32 vCPU / 128 GB RAM /
 1.5 TB disk** (Ubuntu 24.04, GitHub-image-compatible: `sudo`, gcc, apt all
 work; billed per-minute while a job runs). This mirrors
 `ecdsafail-challenge` and clears the record profile's minima
-(MemAvailable ≥ 24 GiB, scratch free ≥ 60 GiB) roughly 5× over — including
-the heaviest instance in the class, a 20-cell-hex `F(S,8)` (~275 M clauses,
-~30 GB DIMACS, ~15–18 GB RSS).
+(MemAvailable ≥ 24 GiB, scratch free ≥ 60 GiB) roughly 5× over — the
+heaviest in-band instance measured (16-hex `F(S,7)`) peaked at ~8 GB RSS,
+~50 GB peak process RSS during drat-trim, and ~25 GB of scratch.
 
 Changing tier is a one-line `runs-on` edit; documented smaller Blacksmith
 sizes that still meet the record minima:
@@ -51,10 +52,9 @@ profile actually consumes.)
 2. Dispatch `record-e2e.yml`: it produces an `F(S,7)` proof with the
    participant tooling and scores it in-harness — the acceptance test for
    the whole record path.
-3. Dispatch `measure.yml` for the `KAPLAN_SHAPES` keys in
-   `tools/ml_feasibility.py`;
-   extend `docs/ml-feasibility.md` with the rows and widen the band to
-   `(20, 8)` — on 128 GB, memory is no longer the constraint.
+3. `measure.yml` timings for the band live in `docs/ml-feasibility.md`
+   ("Record-runner measurements"); dispatch it again only when proposing a
+   band change.
 
 ## Why the preflight fails loud
 
