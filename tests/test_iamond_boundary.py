@@ -1,4 +1,4 @@
-"""V2 real fix (2026-08 audit, docs/audits/2026-08-vuln-review.md): the iamond gate was
+"""V2 real fix (2026-08 audit, archived in Linear): the iamond gate was
 structurally absent beyond the n<=9 census table, so every >=10-cell iamond
 tiler scored by default. boundary.iamond_boundary_word + the Beauquier-Nivat /
 Conway criteria now evaluate every polyiamond.

@@ -1,4 +1,4 @@
-"""V4 regression (2026-08 audit, docs/audits/2026-08-vuln-review.md): MAX_LEVELS bounds corona
+"""V4 regression (2026-08 audit, archived in Linear): MAX_LEVELS bounds corona
 depth but not total work, so a deep, fully-valid patch of large coronas ran
 stages 5c/5d ~L times over the whole accumulated patch — ~380 s per submission,
 pure CI arson (never a hang, always fails closed). check_corona now carries an

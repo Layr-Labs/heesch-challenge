@@ -219,7 +219,6 @@ only when you submit; notes are public, so strip secrets first.
 | `docs/heesch-verifier-architecture.md` | Normative: acceptance rule, pipeline, budgets, record procedure |
 | `docs/heesch-*-encoder-spec.md`, `docs/soundness-note.md`, `docs/CONVENTIONS.md` | Normative: the formula, its soundness obligations, frozen conventions |
 | `docs/THREAT-MODEL.md`, `docs/RUNNER.md`, `docs/STATUS.md` | Security model; benchmark runner; living status + audit tracker |
-| `docs/audits/` | External audits, responses, and historical review logs |
 
 ## Credits
 

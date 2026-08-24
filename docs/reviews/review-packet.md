@@ -29,7 +29,7 @@ Contrapositive: UNSAT ⟹ no `m`-corona ⟹ `Hh(S) ≤ m − 1` ⟹ `S` is not a
 tiler. This implication is the encoder's soundness, decomposed into the
 obligations below. It is the single trust boundary of the whole system
 (threat model TB5): everything else — parser, gates, checkers, sandbox — has
-been through two external security audits (2026-08, `docs/audits/`).
+been through two external security audits (2026-08; archived outside the repo).
 
 Note the direction: only the *corona ⟹ SAT* direction is safety-critical. A
 formula that is accidentally too *hard* to satisfy would create false
