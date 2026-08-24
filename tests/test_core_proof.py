@@ -19,7 +19,7 @@ import sys
 
 import pytest
 
-from util import ROOT, checker_dir_for_tests, omino11_hc1, solve_drat
+from util import ROOT, census_baseline, checker_dir_for_tests, omino11_hc1, solve_drat
 
 from heesch_encoder.proofcheck import core as core_mod
 from heesch_encoder.proofcheck.pipeline import ProofStatus, ProofSubmission, Tier, check_proof_v2
@@ -32,7 +32,7 @@ _spec = importlib.util.spec_from_file_location("prove", ROOT / "tools" / "prove.
 prove = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(prove)
 
-BASELINE = (ROOT / "submission" / "best.heesch").read_text(encoding="ascii")
+BASELINE = census_baseline()
 
 
 # ---------------------------------------------------------------- unit level

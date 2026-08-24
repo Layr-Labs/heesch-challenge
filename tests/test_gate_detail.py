@@ -10,7 +10,7 @@ import os
 import subprocess
 import sys
 
-from util import ROOT  # noqa: F401
+from util import ROOT, census_baseline  # noqa: F401
 
 from heesch_verify import GRIDS
 from heesch_verify.gates import IsohedralGate, Verdict
@@ -25,7 +25,7 @@ IAMOND_TRIANGLE = frozenset(
 # the gate must report that instead of a plain inconclusive.
 HOLED_RING = frozenset((x, y) for x in range(3) for y in range(3)) - {(1, 1)}
 
-BASELINE = (ROOT / "submission" / "best.heesch").read_text(encoding="ascii")
+BASELINE = census_baseline()
 
 
 def _cells_from_corpus(name: str) -> frozenset:

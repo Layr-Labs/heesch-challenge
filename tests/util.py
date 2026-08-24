@@ -77,6 +77,31 @@ def domino_hc1() -> str:
 
 
 # ---------------------------------------------------------------------------
+# The census heptomino below is the frozen test baseline: hc = hh = 1, inside
+# the census bound, scores exactly 1.0 with gate_tier nontiler_census. Tests
+# must use it — never the live submission/best.heesch, which is participant-
+# owned, changes with every Yukon promotion, and can be any tier (the promoted
+# record-tier shape carries a #PROOF block and needs checkers + a record-scale
+# re-encode that the test matrix cannot run). test_suite_hygiene.py enforces
+# this.
+
+def census_baseline() -> str:
+    """The census heptomino with a verified 1-corona (hc = hh = 1)."""
+    return (
+        "O 0 0 0 1 0 2 0 3 0 4 1 0 1 4\n"
+        "~ 1 1 1\n"
+        "8\n"
+        "0 <1,0,0,0,1,0>\n"
+        "1 <1,0,2,0,1,3>\n"
+        "1 <0,-1,5,1,0,2>\n"
+        "1 <-1,0,2,0,-1,1>\n"
+        "1 <-1,0,-1,0,-1,4>\n"
+        "1 <-1,0,1,0,-1,9>\n"
+        "1 <0,1,-3,-1,0,-1>\n"
+        "1 <0,1,-5,-1,0,6>\n"
+    )
+
+
 # Proof-path helpers (architecture §13). The 11-omino below is a Kaplan
 # non-tiler (11omino_2up: Hc=1, Hh=2) OUTSIDE the census bound (O <= 10), so
 # under the fail-closed rule it scores only with a #PROOF block. F(S,2) is

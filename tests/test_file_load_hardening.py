@@ -16,9 +16,9 @@ import sys
 
 import pytest
 
-from util import ROOT  # noqa: F401
+from util import ROOT, census_baseline  # noqa: F401
 
-BASELINE = (ROOT / "submission" / "best.heesch").read_text(encoding="ascii")
+BASELINE = census_baseline()
 
 
 def _run(repo):

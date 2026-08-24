@@ -20,7 +20,7 @@ import sys
 
 import pytest
 
-from util import ROOT, checker_dir_for_tests, omino11_hc1, solve_drat
+from util import ROOT, census_baseline, checker_dir_for_tests, omino11_hc1, solve_drat
 
 from heesch_verify.canonical import canonical_form
 from heesch_verify.parse import parse_submission
@@ -114,7 +114,7 @@ def test_non_executable_checkers_reject_closed(tmp_path):
 
 
 def test_census_shape_with_broken_proof_still_rejects(tmp_path):
-    baseline = (ROOT / "submission" / "best.heesch").read_text(encoding="ascii")
+    baseline = census_baseline()
     text = baseline + _block(1, "a" * 64, 1, 1, "p.drat", "drat", "none", "b" * 64)
     proc, score = _run_harness(tmp_path, text, files=[("p.drat", b"0\n")])
     assert proc.returncode != 0 and score is None

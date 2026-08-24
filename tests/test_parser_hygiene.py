@@ -10,14 +10,14 @@ V8: assert_exhausted never enforced MAX_LINE_CHARS, so an oversized whitespace
 
 import pytest
 
-from util import ROOT  # noqa: F401
+from util import ROOT, census_baseline  # noqa: F401
 
 from heesch_verify import VerifyError, parse_submission, verify_witness
 from heesch_verify.parse import MAX_LINE_CHARS
 from heesch_verify.patch import required_set
 from heesch_verify.result import ErrorCode
 
-BASELINE = (ROOT / "submission" / "best.heesch").read_text(encoding="ascii")
+BASELINE = census_baseline()
 
 
 def _defect_witness(marker: str) -> str:

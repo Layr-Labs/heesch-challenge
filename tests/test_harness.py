@@ -11,9 +11,9 @@ import sys
 
 import pytest
 
-from util import ROOT
+from util import ROOT, census_baseline
 
-BASELINE = (ROOT / "submission" / "best.heesch").read_text(encoding="ascii")
+BASELINE = census_baseline()
 
 
 def _run_harness(tmp_path, shape_text: str):
