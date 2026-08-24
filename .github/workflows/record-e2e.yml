@@ -50,6 +50,9 @@ jobs:
           from util import omino11_hc1
           open("submission/best.heesch", "w").write(omino11_hc1())
           PY
+          # the checkout carries the promoted frontier's proof artifacts, which
+          # belong to the shape we just replaced; prove.py refuses to overwrite
+          rm -f submission/proof.lrat.xz submission/core.txt.xz
           /usr/bin/time -v python3 tools/prove.py submission/best.heesch --m 7 \
             --solver none --solver-bin tools/bin/cadical --profile record
           ls -la submission/
