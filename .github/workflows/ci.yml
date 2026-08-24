@@ -60,12 +60,19 @@ jobs:
       - name: Harness e2e via the real scripts
         if: runner.os == 'Linux'
         run: |
-          # Smoke-tests the committed baseline on maintainer branches only
-          # (submissions/* never reach this workflow). Yukon grades real
-          # submissions via benchmark.yml.
+          # Smoke-tests the scripts against the frozen census fixture, never
+          # the live submission/ — that is participant-owned, changes with
+          # every promotion, and can be any tier (submissions/* never reach
+          # this workflow; Yukon grades real submissions via benchmark.yml).
           bash ./setup.sh
           test -x tools/bin/cake_lpr
+          python3 - <<'PY'
+          import sys; sys.path.insert(0, "tests")
+          from util import census_baseline
+          open("submission/best.heesch", "w").write(census_baseline())
+          PY
+          rm -f submission/proof.lrat.xz submission/core.txt.xz
           bash ./benchmark.sh
           test -f score.json
-          jq -er '.score | select(type == "number")' score.json
+          jq -er '.score == 1.0' score.json
           jq -er '.metrics.non_tiler_evidence | select(. == "census")' score.json
