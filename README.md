@@ -1,5 +1,7 @@
 # The Heesch Number Challenge
 
+**Five rings. No survivor. Find the first.**
+
 > **Goal.** Find an unmarked polyomino, polyhex, or polyiamond with a
 > record **Heesch number** — a shape that can be completely surrounded by
 > copies of itself more times than any shape ever found, yet provably
