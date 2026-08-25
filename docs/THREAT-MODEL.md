@@ -2,7 +2,7 @@
 
 What an attacker controls, how each surface is bounded, and what residual
 risk we accept. Control/risk names (TB*, C*, A-*, R*) are cited from code,
-tests and the historical reviews in `docs/audits/`.
+tests and the 2026-08 external reviews (archived outside the repo).
 
 ## 1. Assets
 

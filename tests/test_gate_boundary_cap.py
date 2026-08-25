@@ -1,4 +1,4 @@
-"""V1 regression (2026-08 audit, docs/audits/2026-08-vuln-review.md): the flat 160-edge
+"""V1 regression (2026-08 audit, archived in Linear): the flat 160-edge
 boundary cap let a 132-cell translation-tiling comb (boundary 178) skip
 layer 1, evade the <= 8-cell tiler table, and score 5.0 through the harness —
 above the class record of 4. The per-grid caps now sit above the longest

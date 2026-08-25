@@ -7,7 +7,7 @@ behaviour. What the verifier *does* is specified once, in
 budgets/profiles §13.5, record procedure §13.9) — this file does not
 duplicate it.
 
-Last updated: 2026-08-20 (Plans 1–3 landed; documentation restructured).
+Last updated: 2026-08-24 (audit reports archived outside the repo; band settled by runner measurement).
 
 ## 1. Snapshot
 
@@ -25,32 +25,19 @@ Last updated: 2026-08-20 (Plans 1–3 landed; documentation restructured).
   checked UNSAT proof, conditional on the stated encoder soundness
   obligations"* until the external M1–M9 review (below) is filed.
 
-## 2. Audit tracker — 2026-08-19 update audit (`docs/audits/2026-08-19-update-audit.md`)
+## 2. Audit tracker
 
-Formal response: `docs/audits/2026-08-19-update-audit-response.md`.
-Status values: FIXED `<commit>` · OPEN · ACCEPTED (with reason).
+Three external audits (2026-08-11 participant-side vulnerability review
+V1–V12/F1–F5, 2026-08-16 comparative audit, 2026-08-19 update audit H1–L15)
+are closed: every finding is fixed or accepted with a written reason, each
+with a regression test in `tests/`. The audit reports and formal responses
+are archived outside the repository (Linear, project "Heesch Challenge");
+the fix commits are on `master` (PRs #4, #5, #6 and `0c4b08d`…`0443a37`).
+The single open row:
 
 | # | Finding | Severity | Status | Where | Test |
 |---|---|---|---|---|---|
-| H1 | Automatic record path excludes the legitimate `Hc = 5, Hh = 6` case; `record_eligible` required exactness | High | FIXED `fd254c4` (classification), `05b055a` (band plumbing), `81082cc`/`49d4125` (measured; bands widened), `2bee047`… (resource profiles + record runner: **in-harness**). Remaining: runner creation + `measure.yml` (§3) | `harness/verify.py::_record_eligible`, `heesch_verify/profile.py`, `heesch_verify/proofgate.py`, `heesch_encoder/proofcheck/pipeline.py`, architecture §2.3/§13.5/§13.9 | `tests/test_record_flag.py`, `tests/test_profile.py`, `tests/test_proof_gate.py` (band tests), `record-e2e.yml` |
-| H2 | `tools/prove.py --out` escapes the submission dir / overwrites `best.heesch`; shared temp dir; no cleanup | High | FIXED `0c4b08d` | `tools/prove.py`, `heesch_verify/parse.py::validate_proof_basename` | `tests/test_prove_cli.py` |
-| M3 | Non-ASCII core data crashes the gate | Medium | FIXED `db45315` | `heesch_encoder/proofcheck/core.py` | `tests/test_core_proof.py::test_non_ascii_core_*` |
-| M4 | Declared proof format not enforced; false provenance | Medium | FIXED `556134e` | `ProofSubmission.declared_format`, `Result.proof_format_detected` | `tests/test_proof_gate.py::test_declared_format_must_match_detected` |
-| M5 | 600 s "encoding" alarm covered the checkers too | Medium | FIXED `191121e` (+ portable deadline `4eb3532`) | `heesch_encoder/proofcheck/guard.py`, `pipeline.check_proof_v2` | `tests/encoder/test_ml_proof_pipeline.py::test_encode_*` |
-| M6 | Proof bytes materialised before the CNF digest check (spec said the reverse) | Medium | ACCEPTED — code order kept, spec corrected `191121e`: bounded decompression precedes the expensive regeneration by design; bytes never parsed/checked before the digest matches | architecture §13.3 step 4, THREAT-MODEL A-3 | `test_wrong_cnf_digest_rejected_before_checkers` |
-| M7 | Non-executable checker passes preflight then crashes | Medium | FIXED `db45315` | `checkers.checker_problem` | `tests/encoder/test_checker_verdicts.py`, `tests/test_proof_gate.py::test_non_executable_checkers_reject_closed` |
-| M8 | README miscounts the `Hc = 4` polyhexes | Medium | FIXED `05b055a` (six: 11, 13, 15, 15, 16, 17 — verified against Kaplan's table) | `README.md` | — |
-| M9 | "Essentially unexplored" band began at the census cutoff | Medium | FIXED `05b055a` | `README.md` | — |
-| L10 | Size caps disagreed across docs | Low | FIXED `33c66f7`; caps are per-profile since `2bee047` | architecture §13.5 | — |
-| L11 | README grammar omitted the `core` line | Low | FIXED `05b055a` | `README.md` | — |
-| L12 | rev-2 manifest records a stale checker policy | Low | FIXED `9a87535` (code-checked addendum; frozen manifest untouched) | `heesch_encoder/revisions/rev-2-addendum.json` | `test_revision_freeze.py::test_rev2_addendum_matches_code` |
-| L13 | `defect_board_enabled` disagreed with scoring | Low | FIXED `33c66f7` (flag live, on by default, honoured by scalar + boards) | `heesch_verify/score.py` | `tests/test_score_store.py::test_defect_enabled_flag_gates_the_fraction` |
-| L14 | Stale values in the 2026-08-16 response | Low | FIXED `33c66f7` | `docs/audits/2026-08-16-comparative-audit-response.md` | — |
-| L15 | CakeML heap comment vs code | Low | FIXED `db45315` | `heesch_encoder/proofcheck/checkers.py` | — |
 | TB | Encoder soundness (M1/M2/M4/M5/M9) needs independent mathematical review | Trust boundary | **OPEN** — external; procedure + reviewer brief + filing format in `soundness-note.md` / `docs/reviews/`; conditional record wording until filed | `docs/soundness-note.md` | round-trip + 46/46 exact-case suites (empirical) |
-
-The 2026-08-16 comparative audit's findings (two criticals) were closed by
-`a58e13b`/`4f2634b`; detail in `docs/audits/2026-08-16-comparative-audit-response.md`.
 
 ## 2a. Independent re-verification, 2026-08-20
 
